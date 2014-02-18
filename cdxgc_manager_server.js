@@ -97,7 +97,7 @@ var CERT_OPTS = {
 	//passphrase: 'kJppRZYkdm4Fc5xr',
 	ca: [fs.readFileSync(BASE_CERT_PATH + '/rmqca/cacert.pem')]
 };
-
+var AMQP_EXCHANGE = "direct_cdxresults";
 var AMQP_PORT = 5671;
 var REDIS_PORT = 6379;
 var REDIS_HOST = "127.0.0.1";
@@ -146,7 +146,58 @@ var start = function() {
 	return deferred.promise;
 };
 
-start();
+start()
+.then(function() {
+	// AMQP Setup:
+	var amqpServer = amqp.connect('amqps://' + cdxgc_gen_args.amqp_host + ':' + cdxgc_gen_args.amqp_port, AMQP_OPTS);
+	amqpServer.then(function (amqpConn) {
+		// Setup signals:
+		process.on('SIGINT', function () {
+			logger.info('SIGNAL: SIGINT caught: Closing connection.');
+			amqpConn.close();
+			process.exit(1); // May need to kick out.
+		});
+		process.on('SIGTERM', function () {
+			logger.info('SIGNAL: SIGTERM caught: Closing connection.');
+			clearInterval(CYCLE_TIMER);
+			amqpConn.close();
+			printCounters(COUNTERS);
+			process.exit(1); // May need to kick out.
+		});
+		
+		return amqpConn.createChannel().then(function(ch) {
+			coreChannel = ch;
+			var ok = ch.assertExchange(AMQP_EXCHANGE, 'direct', {durable: false});
+
+		    ok = ok.then(function() {
+		      return ch.assertQueue('', {exclusive: true});
+		    });
+
+		    ok = ok.then(function(qok) {
+		      var queue = qok.queue;
+		      return all(severities.map(function(sev) {
+		        ch.bindQueue(queue, ex, sev);
+		      })).then(function() { return queue; });
+		    });
+
+		    ok = ok.then(function(queue) {
+		      return ch.consume(queue, logMessage, {noAck: true});
+		    });
+		    return ok.then(function() {
+		      console.log(' [*] Waiting for logs. To exit press CTRL+C.');
+		    });
+
+		    function logMessage(msg) {
+		      console.log(" [x] %s:'%s'",
+		                  msg.fields.routingKey,
+		                  msg.content.toString());
+		    }
+		});
+		
+	}).then(null,function (err) {
+		logger.error("AMQP Error :: "+ err);
+	});
+});
 
 // ----------------------------
 // Express Setup Chain:
