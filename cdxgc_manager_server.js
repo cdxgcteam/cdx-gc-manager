@@ -16,6 +16,7 @@ var version = "0.0.1";
 var main_https = null;
 var https = require('https');
 var path = require('path');
+var util = require('util');	
 var fs = require('fs');
 var crypto = require('crypto');
 var os = require('os');
@@ -42,7 +43,7 @@ var sioServer = require('socket.io');
 var sio = null;
 
 // - Redis -> Redis Driver/Adapter
-var redis = require("redis");
+var redis = require('redis');
 var redispublish = null;
 
 // - AMQP -> RabbitMQ Connection Library
@@ -98,7 +99,9 @@ var CERT_OPTS = {
 	ca: [fs.readFileSync(BASE_CERT_PATH + '/rmqca/cacert.pem')]
 };
 var AMQP_EXCHANGE = "direct_cdxresults";
+var AMQP_ROUTING_KEY = "task_results";
 var AMQP_PORT = 5671;
+//var AMQP_PORT = 5672;
 var REDIS_PORT = 6379;
 var REDIS_HOST = "127.0.0.1";
 
@@ -114,7 +117,7 @@ cdxgc_man_args
 	.option('-ap, --amqp_port <port number>', 'AMQP Server Port', AMQP_PORT)
 	.option('-rh, --redis_host <server name or IP>', 'Redis Server Host', REDIS_HOST)
 	.option('-rp, --redis_port <port number>', 'Redis Server Port', REDIS_PORT)
-	.parse(process.argv)
+	.parse(process.argv);
 
 // ----------------------------
 // Redis and AMQP:
@@ -124,7 +127,7 @@ var redisCmdRecieve = function (channel, message) {
 	logger.debug("redisCmdRecieve :: channel: " + channel + " :: msg: " + message);
 };
 
-var start = function() {
+var starter = function() {
 	var deferred = when.defer();
 
 	logger.info("Starting CDX GC Manager");
@@ -143,13 +146,23 @@ var start = function() {
         logger.error("Redis Error :: " + err);
     });
 
+	deferred.resolve(true);
 	return deferred.promise;
 };
 
-start()
+var logMessage = function(msg) {
+	logger.info("AMQP :: [x] %s:'%s'",
+				msg.fields.routingKey,
+				msg.content.toString());
+};
+
+starter()
 .then(function() {
+	logger.info("AMQP :: Start");
 	// AMQP Setup:
-	var amqpServer = amqp.connect('amqps://' + cdxgc_gen_args.amqp_host + ':' + cdxgc_gen_args.amqp_port, AMQP_OPTS);
+	var amqpServerURL = 'amqps://' + cdxgc_man_args.amqp_host + ':' + cdxgc_man_args.amqp_port;
+	logger.info("AMQP :: URL: " + amqpServerURL);
+	var amqpServer = amqp.connect(amqpServerURL, CERT_OPTS);
 	amqpServer.then(function (amqpConn) {
 		// Setup signals:
 		process.on('SIGINT', function () {
@@ -159,9 +172,7 @@ start()
 		});
 		process.on('SIGTERM', function () {
 			logger.info('SIGNAL: SIGTERM caught: Closing connection.');
-			clearInterval(CYCLE_TIMER);
 			amqpConn.close();
-			printCounters(COUNTERS);
 			process.exit(1); // May need to kick out.
 		});
 		
@@ -170,28 +181,26 @@ start()
 			var ok = ch.assertExchange(AMQP_EXCHANGE, 'direct', {durable: false});
 
 		    ok = ok.then(function() {
-		      return ch.assertQueue('', {exclusive: true});
+				logger.info('AMQP :: Exchange Asserted.');
+				return ch.assertQueue('', {exclusive: true});
 		    });
 
 		    ok = ok.then(function(qok) {
-		      var queue = qok.queue;
-		      return all(severities.map(function(sev) {
-		        ch.bindQueue(queue, ex, sev);
-		      })).then(function() { return queue; });
+				logger.info('AMQP :: Queue Asserted.');
+				var queue = qok.queue;
+				ch.bindQueue(queue, AMQP_EXCHANGE, AMQP_ROUTING_KEY);
+				logger.info('AMQP :: Binding configured.');
+				return queue;
 		    });
 
 		    ok = ok.then(function(queue) {
-		      return ch.consume(queue, logMessage, {noAck: true});
+				logger.info('AMQP :: Consumer configured.');
+				return ch.consume(queue, logMessage, {noAck: true});
 		    });
+			
 		    return ok.then(function() {
-		      console.log(' [*] Waiting for logs. To exit press CTRL+C.');
+				logger.info('AMQP :: [*] Waiting for task results.');
 		    });
-
-		    function logMessage(msg) {
-		      console.log(" [x] %s:'%s'",
-		                  msg.fields.routingKey,
-		                  msg.content.toString());
-		    }
 		});
 		
 	}).then(null,function (err) {
@@ -232,7 +241,7 @@ main_https = https.createServer(CERT_OPTS, app);
 sio = sioServer(main_https);
 // Inform on connections:
 sio.on('connection',function () {
-	logger.info("sio :: on-connection :: conneciton made.");
+	logger.info("sio :: on-connection :: connection made.");
 });
 // Launch HTTPS Server:
 main_https.listen(app.get('port'), function(){
