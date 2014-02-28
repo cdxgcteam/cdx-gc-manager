@@ -2,6 +2,7 @@
 
 var amqp = require('amqplib');
 var when = require('when');
+var all = require('when').all;
 var fs = require('fs');
 
 var BASE_CERT_PATH = "/home/cdxgcserver/cdx_gc_certs2";
@@ -13,33 +14,52 @@ var CERT_OPTS = {
 	//passphrase: 'kJppRZYkdm4Fc5xr',
 	ca: [fs.readFileSync(BASE_CERT_PATH + '/rmqca/cacert.pem')]
 };
-var AMQP_EXCHANGE = "direct_cdxresults";
-var AMQP_ROUTING_KEY = "task_results";
+var AMQP_RESULTS_EXCHANGE = "direct_cdxresults";
+var AMQP_RESULTS_ROUTING_KEY = "task_results";
 
-var args = process.argv.slice(2);
-var severity = AMQP_ROUTING_KEY;
-var message = args.join(' ') || 'Hello World!';
+var AMQP_TASK_EXCHANGE = "topic_cdxtasks";
+var AMQP_TASK_BINDING_KEYS = ["all.*", "navy.linux.*"];
 
-var counter=0;
-var counterInt;
+var AMQP_CH = null;
+
+var message = 'Hello World!';
+
+logMessage = function(msg) {
+	console.log(" [x] %s:'%s'",
+				msg.fields.routingKey,
+				msg.content.toString());
+	
+	AMQP_CH.publish(AMQP_RESULTS_EXCHANGE, AMQP_RESULTS_ROUTING_KEY, new Buffer(message));
+	console.log(" RESULT!! Sent %s:'%s'", message);
+};
 
 var amqpServerURL = 'amqps://cdxgcserver:5671';
 amqp.connect('amqp://localhost').then(function(conn) {
 	return when(conn.createChannel().then(function(ch) {
-		var ok = ch.assertExchange(AMQP_EXCHANGE, 'direct', {durable: false});
+		AMQP_CH = ch;
+		var tasks = ch.assertExchange(AMQP_TASK_EXCHANGE, 'topic', {durable: false});
 		
-		return ok.then(function() {
-			counterInt = setInterval(function () {
-				if (counter >= 1000) {
-					clearInterval(counterInt);
-					conn.close();
-					return;
-				}
-				ch.publish(AMQP_EXCHANGE, AMQP_ROUTING_KEY, new Buffer(message+counter));
-				console.log(" [x] Sent %s:'%s'", severity, message);
-				counter++;
-			},1000);
-			//return ch.close();
+	    tasks = tasks.then(function() {
+			console.log('AMQP :: Tasks Exchange Asserted.');
+			return ch.assertQueue('', {exclusive: true});
+	    });
+		
+	    tasks = tasks.then(function(qok) {
+			console.log('AMQP :: Tasks Queue Asserted.');
+			var queue = qok.queue;
+			return all(AMQP_TASK_BINDING_KEYS.map(function(rk) {
+				ch.bindQueue(queue, AMQP_TASK_EXCHANGE, rk);
+			})).then(function() {
+				console.log('AMQP :: Tasks Queues Binded.');
+				return queue;
+			});
+	    });
+		
+		tasks = tasks.then(function(queue) {
+			return ch.consume(queue, logMessage, {noAck: true});
+		});
+		return tasks.then(function() {
+			console.log(' AMQP :: Waiting for tasks. To exit press CTRL+C.');
 		});
 	}));
 }).then(null, console.warn);
