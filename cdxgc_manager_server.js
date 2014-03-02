@@ -89,6 +89,7 @@ function errorHandler(err, req, res, next) {
 // ----------------------------
 // GLOBALS:
 // ----------------------------
+var WEB_SERVER_PORT = 3443;
 var BASE_CERT_PATH = "/home/cdxgcserver/cdx_gc_certs2";
 var CERT_OPTS = {
 	cert: fs.readFileSync(BASE_CERT_PATH + '/manager/cert.pem'),
@@ -113,6 +114,7 @@ var REDIS_MAL_SUBSCRIPTION = "redis_mal_sub";
 // ----------------------------
 cdxgc_man_args
 	.version(version)
+	.option('-wp, --web_port <port number>', 'Web Server Port (HTTPS Port Default: ' + WEB_SERVER_PORT +')', WEB_SERVER_PORT)
 	.option('-ah, --amqp_host <server name or IP>', 'AMQP Server Host', os.hostname())
 	.option('-ap, --amqp_port <port number>', 'AMQP Server Port', AMQP_PORT)
 	.option('-rh, --redis_host <server name or IP>', 'Redis Server Host', REDIS_HOST)
@@ -132,6 +134,7 @@ var starter = function() {
 
 	logger.info("Starting CDX GC Manager");
 
+	logger.info("Web Server Port: " + cdxgc_man_args.web_port);
 	logger.info("AMQP Server: " + cdxgc_man_args.amqp_host);
 	logger.info("AMQP Port: " + cdxgc_man_args.amqp_port);
 	logger.info("Redis Server: " + cdxgc_man_args.redis_host);
@@ -214,7 +217,7 @@ starter()
 var app = express();
 
 // all environments
-app.set('port', process.env.PORT || 3443);
+app.set('port', process.env.PORT || cdxgc_man_args.web_port);
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'jade');
 app.use(express.favicon());
@@ -235,6 +238,7 @@ if ('development' == app.get('env')) {
 
 // Routes:
 app.get('/', routes.index);
+app.get('/viewalltasks', routes.viewalltasks);
 // Create HTTPS Server:
 main_https = https.createServer(CERT_OPTS, app);
 // Attach Socket.io

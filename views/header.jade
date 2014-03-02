@@ -12,9 +12,23 @@ nav(class='navbar navbar-default', role='navigation')
 				= " " + title
 		div#bs-example-navbar-collapse-1(class='collapse navbar-collapse')
 			ul(class='nav navbar-nav')
-				li(class='active')
-					a(href='/') Malicious Tasks
-				li
-					a(href='/viewalltasks') View All Tasks
-				li
-					a(href='/admin') Admin
+				if (current_url == '/')
+					li(class='active')
+						a(href='/') Malicious Tasks
+				else
+					li
+						a(href='/') Malicious Tasks
+				
+				if (current_url == '/viewalltasks')
+					li(class='active')
+						a(href='/viewalltasks') View All Tasks
+				else
+					li
+						a(href='/viewalltasks') View All Tasks
+				
+				if (current_url == '/admin')
+					li(class='active')
+						a(href='/admin') Admin
+				else
+					li
+						a(href='/admin') Admin

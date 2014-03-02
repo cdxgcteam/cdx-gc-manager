@@ -1,0 +1,27 @@
+extends layout
+
+block content
+	.container-fluid
+		.row
+			h1 All Tasks
+			table#mal_table(class='table table-striped table-hover table-condensed')
+				thead
+					tr
+						th Task ID
+						th URL
+						th POC
+						th Min Time(ms)
+						th Time(ms)
+						th Submit Time
+						th Completed
+				tbody#mal_tbody
+					tr
+						td 2fd4e1c67a2d28fced849ee1bb76e7391b93eb12
+						td
+							a(href='http://www.google.com',data-toggle="tooltip",data-placement="right",title="Tooltip on right") Link
+						td dyap
+						td 500 ms
+						td 34500 ms
+						td 2014-02-04T02:22:32.076Z
+						td
+							span(class='badge') 20
