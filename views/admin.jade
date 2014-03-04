@@ -1,0 +1,20 @@
+extends layout
+
+block content
+	.container-fluid
+		.row
+			.col-md-6
+				h1 Malicious Input
+				form#malinput(role='form')
+					.form-group
+						label(for='inputURL') URL
+						input#inputURL(type='text', class='form-control', placeholder='Enter or copy URL')
+					.form-group
+						label(for='inputPOC') POC
+						input#inputPOC(type='text', class='form-control', placeholder='Enter POC')
+					.form-group
+						label(for='inputMinTime') Minimum Time
+						input#inputMinTime(type='text', class='form-control', placeholder='Enter Minimum Time')
+					button(type='submit',class='btn btn-default') Submit
+			.col-md-6
+				h1 Redis Options

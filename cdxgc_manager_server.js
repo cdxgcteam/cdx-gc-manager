@@ -108,6 +108,10 @@ var REDIS_HOST = "127.0.0.1";
 
 var REDIS_CMD_SUBSCRIPTION = "redis_cmd_sub";
 var REDIS_MAL_SUBSCRIPTION = "redis_mal_sub";
+var REDIS_SENT_HEADER = "sent_meta_";
+var REDIS_SENT_ORDER_KEY = "cdx_sent_order";
+var REDIS_MAL_HEADER = "mal_meta_";
+var REDIS_MAL_ORDER_KEY = "cdx_mal_order";
 
 // ----------------------------
 // Commander:
@@ -141,6 +145,7 @@ var starter = function() {
 	logger.info("Redis Port: " + cdxgc_man_args.redis_port);
 
 	// Redis Setup:
+	redisclient = redis.createClient(cdxgc_man_args.redis_port, cdxgc_man_args.redis_host);
 	redispublish = redis.createClient(cdxgc_man_args.redis_port, cdxgc_man_args.redis_host);
     redispublish.on("connect", function (err) {
         logger.info("Redis Connected");
@@ -239,13 +244,41 @@ if ('development' == app.get('env')) {
 // Routes:
 app.get('/', routes.index);
 app.get('/viewalltasks', routes.viewalltasks);
+app.get('/admin', routes.admin);
 // Create HTTPS Server:
 main_https = https.createServer(CERT_OPTS, app);
 // Attach Socket.io
 sio = sioServer(main_https);
 // Inform on connections:
-sio.on('connection',function () {
+sio.on('connection',function (socket) {
 	logger.info("sio :: on-connection :: connection made.");
+	socket.on('updateTable', function(data){
+		if(data == 'mal') {
+			var main_defer = when.defer();
+			var main_resolver = main_defer.resolver;
+			var main_promise = main_defer.promise;
+
+			// Pull all the keys:
+			redisclient.zrevrange(REDIS_SENT_ORDER_KEY, 0, 29, function(err, reply) {
+				logger.info('Zrevrange Reply: '+util.inspect(reply));
+				main_resolver.resolve(reply);
+			});
+			
+			var main_defer = when.map(main_promise, function(item){
+				var defer = when.defer();
+				logger.info('hmget item: '+item);
+				redisclient.hgetall(item, function (err, reply) {
+					logger.info('hmget reply: '+util.inspect(reply));
+					defer.resolve(reply);
+				});
+				return defer.promise;
+			}).then(function (data) {
+				
+				logger.info('Blobs JSON:\n'+JSON.stringify(data));
+				socket.emit('updateMalicious', data);
+			});
+		}
+	});
 });
 // Launch HTTPS Server:
 main_https.listen(app.get('port'), function(){

@@ -16,3 +16,10 @@ exports.viewalltasks = function(req, res){
 		current_url: '/viewalltasks'
 	});
 };
+
+exports.admin = function(req, res){
+	res.render('admin', {
+		title: 'CDX Greycell Manager',
+		current_url: '/admin'
+	});
+};
