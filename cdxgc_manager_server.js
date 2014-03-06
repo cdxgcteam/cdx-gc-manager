@@ -252,32 +252,55 @@ sio = sioServer(main_https);
 // Inform on connections:
 sio.on('connection',function (socket) {
 	logger.info("sio :: on-connection :: connection made.");
-	socket.on('updateTable', function(data){
-		if(data == 'mal') {
-			var main_defer = when.defer();
-			var main_resolver = main_defer.resolver;
-			var main_promise = main_defer.promise;
-
+	socket.on('updateFullTable', function(tabletype){
+		logger.info("sio :: updateFullTable: " + tabletype);
+		var main_defer = when.defer();
+		var main_resolver = main_defer.resolver;
+		var main_promise = main_defer.promise;
+		
+		if(tabletype === 'mal') {
+			// Pull all the keys:
+			redisclient.zrevrange(REDIS_MAL_ORDER_KEY, 0, 29, function(err, reply) {
+				logger.info('sio :: updateFullMalicious :: Zrevrange Reply: '+util.inspect(reply));
+				if (reply.length == 0) {
+					main_resolver.reject('no_data');
+				} else {
+					main_resolver.resolve(reply);
+				}
+			});
+		} else if (tabletype === 'alltasks') {
 			// Pull all the keys:
 			redisclient.zrevrange(REDIS_SENT_ORDER_KEY, 0, 29, function(err, reply) {
-				logger.info('Zrevrange Reply: '+util.inspect(reply));
-				main_resolver.resolve(reply);
-			});
-			
-			var main_defer = when.map(main_promise, function(item){
-				var defer = when.defer();
-				logger.info('hmget item: '+item);
-				redisclient.hgetall(item, function (err, reply) {
-					logger.info('hmget reply: '+util.inspect(reply));
-					defer.resolve(reply);
-				});
-				return defer.promise;
-			}).then(function (data) {
-				
-				logger.info('Blobs JSON:\n'+JSON.stringify(data));
-				socket.emit('updateMalicious', data);
+				logger.info('sio :: updateFullAllTasks :: Zrevrange Reply: '+util.inspect(reply));
+				if (reply.length == 0) {
+					main_resolver.reject('no_data');
+				} else {
+					main_resolver.resolve(reply);
+				}
 			});
 		}
+		
+		var main_defer = when.map(main_promise, function(item){
+			var defer = when.defer();
+			logger.info('sio :: updateFullTable :: hmget item: '+item);
+			redisclient.hgetall(item, function (err, reply) {
+				logger.info('sio :: updateFullTable :: hmget reply: '+util.inspect(reply));
+				defer.resolve(reply);
+			});
+			return defer.promise;
+		}).then(function (fullTableData) {	
+			logger.info('sio :: updateFullTable :: Blobs JSON:\n'+JSON.stringify(fullTableData));
+			if (tabletype === 'mal') {
+				logger.info('sio :: updateFullTable :: updateFullMalicious');
+				socket.emit('updateFullMalicious', fullTableData);
+			} else if (tabletype === 'alltasks') {
+				logger.info('sio :: updateFullTable :: updateFullAllTasks');
+				socket.emit('updateFullAllTasks', fullTableData);
+			}
+		});	
+	});
+	socket.on('updateTable', function(tabletype){
+		
 	});
 });
 // Launch HTTPS Server:

@@ -1,29 +1,24 @@
 //START
 (function(){
 
-var socket = io(document.baseURI);
-socket.on('connect', function(){
-	socket.on('updateMalicious', function(data){
-		console.log('Blobs JSON:\n'+JSON.stringify(data));
-		for(var i=(data.length-1); i > 0; i--) {
-			addNewRow(
-				'mal_tbody',
-				data[i].taskid,
-				data[i].url,
-				'dyap',
-				'500' + ' ms',
-				data[i].workTime + ' ms',
-				data[i].taskCreateDate,
-				0
-			);
-		}
-	});
-	socket.on('disconnect', function(){
-		console.log('sio :: disconnected');
-	});
-});
+var pushFullTable = function(intable, tabledata) {
+	//console.log('pushFullTable JSON:\n'+JSON.stringify(tabledata));
+	for(var i=(tabledata.length-1); i >= 0; i--) {
+		addNewRow(
+			intable,
+			tabledata[i].taskid,
+			tabledata[i].url,
+			tabledata[i].poc,
+			tabledata[i].minWorkTime,
+			tabledata[i].workTime,
+			tabledata[i].taskCreateDate,
+			tabledata[i].taskCreateMS,
+			0
+		);
+	}
+};
 
-var addNewRow = function (tbodyStr, id, url, poc, minTime, timeActual, submittedTime, completedCount) {
+var addNewRow = function (tbodyStr, id, url, poc, minTime, workTime, submittedTime, submittedTimeMS, completedCount) {
 	var tempStr = '#' + tbodyStr;
 	var baseTable = $(tempStr);
 	if (baseTable.length == 1) {
@@ -41,13 +36,13 @@ var addNewRow = function (tbodyStr, id, url, poc, minTime, timeActual, submitted
 		cur_poc.innerText = poc;
 
 		cur_min = newRow.insertCell(3);
-		cur_min.innerText = minTime;
+		cur_min.innerText = minTime + ' ms';
 
 		cur_time = newRow.insertCell(4);
-		cur_time.innerText = timeActual;
+		cur_time.innerText = workTime + ' ms';
 
 		cur_submit = newRow.insertCell(5);
-		cur_submit.innerText = submittedTime;
+		cur_submit.innerText = submittedTime + '('+ submittedTimeMS +' ms)';
 
 		cur_badge = newRow.insertCell(6);
 		cur_badge.innerHTML = '<span class="badge">' + completedCount + '</span>';	
@@ -62,6 +57,26 @@ var addNewRow = function (tbodyStr, id, url, poc, minTime, timeActual, submitted
 	}
 };
 
+var socket = null;
+var start_socket = function () {
+	return $.Deferred(function (defer) {
+		socket = io(document.location.origin);
+		socket.on('connect', function(){
+			console.log('sio :: connected');
+			defer.resolve(true);
+			socket.on('updateFullAllTasks', function(data){
+				pushFullTable('tasks_tbody', data);
+			});
+			socket.on('updateFullMalicious', function(data){
+				pushFullTable('mal_tbody', data);
+			});
+			socket.on('disconnect', function(){
+				console.log('sio :: disconnected');
+			});
+		});
+	}).promise();
+};
+
 var runner = function () {
 
 	var table_exists = null;
@@ -71,22 +86,22 @@ var runner = function () {
 		table_type = 'mal';		
 	} else if (document.location.pathname === '/viewalltasks') {
 		table_exists = $('document:has(#tasks_tbody)');
-		table_type = 'all';
+		table_type = 'alltasks';
 	}
 
 	if (!_.isNull(table_exists)){
-		socket.emit('updateTable', table_type);
-		// setInterval(function () {
-		// 	
-		// }, 5000); // Update every 5 seconds.
+		console.log('sio :: updateFullTable command sent');
+		socket.emit('updateFullTable', table_type);
 	}
 
-	
-	
+	setInterval(function () {
+		socket.emit('updateTable', table_type);
+	},5000);
+
 };
 
 $( document ).ready(function () {
-	runner();
+	start_socket().then(runner);
 });
 
 //END
