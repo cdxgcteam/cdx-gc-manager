@@ -94,10 +94,20 @@ var runner = function () {
 
 	if (!_.isNull(table_exists)){
 		console.log('sio :: updateFullTable command sent');
-		socket.emit('updateFullTable', table_type);
+		
+		socket.emit('updateFullTable', {
+			'tabletype': table_type,
+			'updatetype': 'full'
+		});
 		
 		setInterval(function () {
-			socket.emit('updateTable', table_type);
+			console.log('sio :: starting to update table...');
+			var lasttimems = $('#tasks_tbody tr:first td:contains("ms)")')[0].textContent.match(/\((\d+)\s+ms\)/)[1];
+			socket.emit('updateFullTable', {
+				'tabletype': table_type,
+				'updatetype': 'update'
+				'lasttimems': lasttimems
+			});
 		},5000);
 	}
 

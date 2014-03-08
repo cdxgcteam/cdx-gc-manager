@@ -230,6 +230,22 @@ app.use(express.logger({stream:winstonStream}));
 app.use(express.json());
 app.use(express.urlencoded());
 app.use(express.methodOverride());
+// app.use(express.basicAuth(function (user, pass, callback) {
+// 	var tempUser = 'cdxman_user_' + user;
+// 	redisclient.get(tempUser, function (err, reply) {
+// 		if (err) return callback(err);
+// 		if(_.isNull(reply)) {
+// 			var no_reply = 'login error.';
+// 			return callback(no_reply);
+// 		}
+// 		if (reply === pass) {
+// 			callback(null, user);
+// 		} else {
+// 			var bad_pass = 'login error.';
+// 			return callback(bad_pass);
+// 		}
+// 	});
+// }));
 app.use(app.router);
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(logErrors);
@@ -252,15 +268,43 @@ sio = sioServer(main_https);
 // Inform on connections:
 sio.on('connection',function (socket) {
 	logger.info('sio :: on-connection :: connection made.');
-	socket.on('updateFullTable', function(tabletype){
-		logger.info('sio :: updateFullTable: ' + tabletype);
+	socket.on('updateFullTable', function(tableObject){
+		logger.info('sio :: updateFullTable: ' + tableObject.tabletype);
 		var main_defer = when.defer();
 		var main_resolver = main_defer.resolver;
 		var main_promise = main_defer.promise;
 		
-		if(tabletype === 'mal') {
+		var sort_key = null;
+		var emit_key = null;
+		if(tableObject.tabletype === 'mal') {
+			sort_key = REDIS_MAL_ORDER_KEY;
+			emit_key = 'updateFullMalicious';
 			// Pull all the keys:
-			redisclient.zrevrange(REDIS_MAL_ORDER_KEY, 0, 29, function(err, reply) {
+			// redisclient.zrevrange(REDIS_MAL_ORDER_KEY, 0, 29, function(err, reply) {
+// 				logger.info('sio :: updateFullMalicious :: Zrevrange Reply: '+util.inspect(reply));
+// 				if (reply.length == 0) {
+// 					main_resolver.reject('no_data');
+// 				} else {
+// 					main_resolver.resolve(reply);
+// 				}
+// 			});
+		} else if (tableObject.tabletype === 'alltasks') {
+			// Pull all the keys:
+			sort_key = REDIS_SENT_ORDER_KEY;
+			emit_key = 'updateFullMalicious';
+			// redisclient.zrevrange(REDIS_SENT_ORDER_KEY, 0, 29, function(err, reply) {
+// 				logger.info('sio :: updateFullAllTasks :: Zrevrange Reply: '+util.inspect(reply));
+// 				if (reply.length == 0) {
+// 					main_resolver.reject('no_data');
+// 				} else {
+// 					main_resolver.resolve(reply);
+// 				}
+// 			});
+		}
+		
+		if (tableObject.updatetype === 'full') {
+			// Pull all the keys:
+			redisclient.zrevrange(sort_key, 0, 29, function(err, reply) {
 				logger.info('sio :: updateFullMalicious :: Zrevrange Reply: '+util.inspect(reply));
 				if (reply.length == 0) {
 					main_resolver.reject('no_data');
@@ -268,10 +312,12 @@ sio.on('connection',function (socket) {
 					main_resolver.resolve(reply);
 				}
 			});
-		} else if (tabletype === 'alltasks') {
-			// Pull all the keys:
-			redisclient.zrevrange(REDIS_SENT_ORDER_KEY, 0, 29, function(err, reply) {
-				logger.info('sio :: updateFullAllTasks :: Zrevrange Reply: '+util.inspect(reply));
+		} else if (tableObject.updatetype === 'update') {
+			var currentTime = new Date();
+			var start_time_ms = currentTime.getTime();
+			var end_time_ms = tableObject.lasttimems;
+			redisclient.zrevrangebyscore(sort_key, start_time_ms, end_time_ms, function(err, reply) {
+				logger.info('sio :: updateFullMalicious :: Zrevrangebyscore Reply: '+util.inspect(reply));
 				if (reply.length == 0) {
 					main_resolver.reject('no_data');
 				} else {
@@ -279,7 +325,7 @@ sio.on('connection',function (socket) {
 				}
 			});
 		}
-		
+
 		var main_defer = when.map(main_promise, function(item){
 			var defer = when.defer();
 			logger.info('sio :: updateFullTable :: hmget item: '+item);
@@ -290,17 +336,9 @@ sio.on('connection',function (socket) {
 			return defer.promise;
 		}).then(function (fullTableData) {	
 			logger.info('sio :: updateFullTable :: Blobs JSON:\n'+JSON.stringify(fullTableData));
-			if (tabletype === 'mal') {
-				logger.info('sio :: updateFullTable :: updateFullMalicious');
-				socket.emit('updateFullMalicious', fullTableData);
-			} else if (tabletype === 'alltasks') {
-				logger.info('sio :: updateFullTable :: updateFullAllTasks');
-				socket.emit('updateFullAllTasks', fullTableData);
-			}
+			logger.info('sio :: updateFullTable :: ' + emit_key);
+			socket.emit(emit_key, fullTableData);
 		});	
-	});
-	socket.on('updateTable', function(tabletype){
-		
 	});
 });
 // Launch HTTPS Server:
