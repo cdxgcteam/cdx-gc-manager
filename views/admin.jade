@@ -2,7 +2,7 @@ extends layout
 
 block content
 	.container-fluid
-		.row
+		div(class='row admininput')
 			.col-md-6
 				h1 Malicious Input
 				.row
@@ -21,8 +21,7 @@ block content
 						label(for='inputMinTime') Minimum Time
 						input#inputMinTime(type='text', class='form-control', placeholder='Enter Minimum Time')
 					button(type='submit',class='btn btn-default') Submit
-			.col-md-1
-			.col-md-5
+			.col-md-6
 				h1 Redis Options
 				.row
 					div(class='panel panel-info')
@@ -30,8 +29,20 @@ block content
 							h4(class='panel-title') Redis Command Status
 						div#redisCmdStatus(class='panel-body') ...Status...
 				.row
+					h5 Redis Export Commands
+					ul(class='list-group')
+						li(class='list-group-item')
+							button#exportAllKeys(class='btn btn-default') Export All Keys
+						li(class='list-group-item')
+							button#exportMalKeys(class='btn btn-default') Export Malicious Keys
+				.row
+					h5 Redis Clear Commands
 					ul(class='list-group')
 						li(class='list-group-item')
 							button#clearSentOrder(class='btn btn-default') Clear Sent Order
 						li(class='list-group-item')
+							button#clearMalOrder(class='btn btn-default') Clear Malicious Order
+						li(class='list-group-item')
 							button#clearAllKeys(class='btn btn-default') Clear All Keys
+						li(class='list-group-item')
+							button#exportAllKeys(class='btn btn-default') Export All Keys

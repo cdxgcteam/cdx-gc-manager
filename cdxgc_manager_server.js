@@ -7,7 +7,7 @@
 // Author: Derek Yap <zangzi@gmail.com>
 // License: MIT
 // Version: 0.0.1
-var version = "0.0.1";
+var version = '0.0.1';
 
 // ----------------------------
 // Requires:
@@ -32,7 +32,7 @@ var wellprng = require('well-rng');
 var well = new wellprng();
 
 // - Commander (Command Line Utility)
-var cdxgc_man_args = require("commander");
+var cdxgc_man_args = require('commander');
 
 // - Express and Routes Setup:
 var express = require('express');
@@ -55,7 +55,7 @@ var winston = require('winston');
 var logger = new (winston.Logger)({
 	exitOnError: false,
 	transports: [
-		new (winston.transports.Console)({level: "debug", colorize: true, timestamp: true})//,
+		new (winston.transports.Console)({level: 'debug', colorize: true, timestamp: true})//,
 		//new (winston.transports.File)({ filename: 'info.log' })
 	]//,
 	// exceptionHandlers: [
@@ -81,7 +81,7 @@ function clientErrorHandler(err, req, res, next) {
     next(err);
   }
 }
-// "catch-all" error handler
+// 'catch-all' error handler
 function errorHandler(err, req, res, next) {
   res.status(500);
   res.render('error', { error: err });
@@ -90,7 +90,7 @@ function errorHandler(err, req, res, next) {
 // GLOBALS:
 // ----------------------------
 var WEB_SERVER_PORT = 3443;
-var BASE_CERT_PATH = "/home/cdxgcserver/cdx_gc_certs2";
+var BASE_CERT_PATH = '/home/cdxgcserver/cdx_gc_certs2';
 var CERT_OPTS = {
 	cert: fs.readFileSync(BASE_CERT_PATH + '/manager/cert.pem'),
 	key: fs.readFileSync(BASE_CERT_PATH + '/manager/key.pem'),
@@ -99,19 +99,19 @@ var CERT_OPTS = {
 	//passphrase: 'kJppRZYkdm4Fc5xr',
 	ca: [fs.readFileSync(BASE_CERT_PATH + '/rmqca/cacert.pem')]
 };
-var AMQP_EXCHANGE = "direct_cdxresults";
-var AMQP_ROUTING_KEY = "task_results";
+var AMQP_EXCHANGE = 'direct_cdxresults';
+var AMQP_ROUTING_KEY = 'task_results';
 var AMQP_PORT = 5671;
 //var AMQP_PORT = 5672;
 var REDIS_PORT = 6379;
-var REDIS_HOST = "127.0.0.1";
+var REDIS_HOST = '127.0.0.1';
 
-var REDIS_CMD_SUBSCRIPTION = "redis_cmd_sub";
-var REDIS_MAL_SUBSCRIPTION = "redis_mal_sub";
-var REDIS_SENT_HEADER = "sent_meta_";
-var REDIS_SENT_ORDER_KEY = "cdx_sent_order";
-var REDIS_MAL_HEADER = "mal_meta_";
-var REDIS_MAL_ORDER_KEY = "cdx_mal_order";
+var REDIS_CMD_SUBSCRIPTION = 'redis_cmd_sub';
+var REDIS_MAL_SUBSCRIPTION = 'redis_mal_sub';
+var REDIS_SENT_HEADER = 'sent_meta_';
+var REDIS_SENT_ORDER_KEY = 'cdx_sent_order';
+var REDIS_MAL_HEADER = 'mal_meta_';
+var REDIS_MAL_ORDER_KEY = 'cdx_mal_order';
 
 // ----------------------------
 // Commander:
@@ -130,28 +130,28 @@ cdxgc_man_args
 // ----------------------------
 
 var redisCmdRecieve = function (channel, message) {
-	logger.debug("redisCmdRecieve :: channel: " + channel + " :: msg: " + message);
+	logger.debug('redisCmdRecieve :: channel: ' + channel + ' :: msg: ' + message);
 };
 
 var starter = function() {
 	var deferred = when.defer();
 
-	logger.info("Starting CDX GC Manager");
+	logger.info('Starting CDX GC Manager');
 
-	logger.info("Web Server Port: " + cdxgc_man_args.web_port);
-	logger.info("AMQP Server: " + cdxgc_man_args.amqp_host);
-	logger.info("AMQP Port: " + cdxgc_man_args.amqp_port);
-	logger.info("Redis Server: " + cdxgc_man_args.redis_host);
-	logger.info("Redis Port: " + cdxgc_man_args.redis_port);
+	logger.info('Web Server Port: ' + cdxgc_man_args.web_port);
+	logger.info('AMQP Server: ' + cdxgc_man_args.amqp_host);
+	logger.info('AMQP Port: ' + cdxgc_man_args.amqp_port);
+	logger.info('Redis Server: ' + cdxgc_man_args.redis_host);
+	logger.info('Redis Port: ' + cdxgc_man_args.redis_port);
 
 	// Redis Setup:
 	redisclient = redis.createClient(cdxgc_man_args.redis_port, cdxgc_man_args.redis_host);
 	redispublish = redis.createClient(cdxgc_man_args.redis_port, cdxgc_man_args.redis_host);
-    redispublish.on("connect", function (err) {
-        logger.info("Redis Connected");
+    redispublish.on('connect', function (err) {
+        logger.info('Redis Connected');
     });
-    redispublish.on("error", function (err) {
-        logger.error("Redis Error :: " + err);
+    redispublish.on('error', function (err) {
+        logger.error('Redis Error :: ' + err);
     });
 
 	deferred.resolve(true);
@@ -159,17 +159,17 @@ var starter = function() {
 };
 
 var logMessage = function(msg) {
-	logger.info("AMQP :: [x] %s:'%s'",
+	logger.info('AMQP :: [x] %s:"%s"',
 				msg.fields.routingKey,
 				msg.content.toString());
 };
 
 starter()
 .then(function() {
-	logger.info("AMQP :: Start");
+	logger.info('AMQP :: Start');
 	// AMQP Setup:
 	var amqpServerURL = 'amqps://' + cdxgc_man_args.amqp_host + ':' + cdxgc_man_args.amqp_port;
-	logger.info("AMQP :: URL: " + amqpServerURL);
+	logger.info('AMQP :: URL: ' + amqpServerURL);
 	var amqpServer = amqp.connect(amqpServerURL, CERT_OPTS);
 	amqpServer.then(function (amqpConn) {
 		// Setup signals:
@@ -212,7 +212,7 @@ starter()
 		});
 		
 	}).then(null,function (err) {
-		logger.error("AMQP Error :: "+ err);
+		logger.error('AMQP Error :: '+ err);
 	});
 });
 
@@ -251,9 +251,9 @@ main_https = https.createServer(CERT_OPTS, app);
 sio = sioServer(main_https);
 // Inform on connections:
 sio.on('connection',function (socket) {
-	logger.info("sio :: on-connection :: connection made.");
+	logger.info('sio :: on-connection :: connection made.');
 	socket.on('updateFullTable', function(tabletype){
-		logger.info("sio :: updateFullTable: " + tabletype);
+		logger.info('sio :: updateFullTable: ' + tabletype);
 		var main_defer = when.defer();
 		var main_resolver = main_defer.resolver;
 		var main_promise = main_defer.promise;
