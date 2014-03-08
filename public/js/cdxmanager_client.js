@@ -57,6 +57,7 @@ var addNewRow = function (tbodyStr, id, url, poc, minTime, workTime, submittedTi
 	}
 };
 
+// Socket Setup:
 var socket = null;
 var start_socket = function () {
 	return $.Deferred(function (defer) {
@@ -77,8 +78,10 @@ var start_socket = function () {
 	}).promise();
 };
 
+// Main: Running start...
 var runner = function () {
 
+	// For the table pages:
 	var table_exists = null;
 	var table_type = '';
 	if (document.location.pathname === '/'){ // Malicious Dashboard
@@ -92,16 +95,29 @@ var runner = function () {
 	if (!_.isNull(table_exists)){
 		console.log('sio :: updateFullTable command sent');
 		socket.emit('updateFullTable', table_type);
+		
+		setInterval(function () {
+			socket.emit('updateTable', table_type);
+		},5000);
 	}
 
-	setInterval(function () {
-		socket.emit('updateTable', table_type);
-	},5000);
-
+	// For the admin page:
+	if (document.location.pathname === '/admin'){
+		$('#clearSentOrder').submit(function () {
+			console.log('Clearing sent order...');
+			socket.emit('clearSentOrder');
+		});
+	
+		$('#clearAllKeys').submit(function () {	
+			console.log('Clearing all keys...');
+			socket.emit('clearAllKeys');
+		});
+	}
 };
 
 $( document ).ready(function () {
 	start_socket().then(runner);
+	
 });
 
 //END
