@@ -312,16 +312,93 @@ sio.on('connection',function (socket) {
 		});	
 	});
 	socket.on('redisCmd', function (redisCmdObj) {
-		if(redisCmdObj.cmd === 'exportAllKeys' || 
-		   redisCmdObj.cmd === 'exportMalKeys')
+		var statusEmitStr = 'redisCmdStatus';
+		var curCmd = redisCmdObj.cmd;
+		logger.info('sio :: redisCmd :: Current Command: '+curCmd);
+		if(curCmd === 'exportAllKeys' || 
+		   curCmd === 'exportMalKeys')
 		{
 			logger.info('sio :: TODO Export All Keys');
-		} else if(redisCmdObj.cmd === 'clearSentOrder' || 
-		          redisCmdObj.cmd === 'clearMalOrder')
+		} else if(curCmd === 'clearSentOrder' || 
+		          curCmd === 'clearMalOrder')
 		{
-			logger.info('sio :: TODO Clear Sent or Mal Orders');
-		} else if(redisCmdObj.cmd === 'clearAllKeys'){
-			logger.info('sio :: TODO Clear All Keys');
+			var currentSortKey = null;
+			if(curCmd === 'clearSentOrder') {
+				currentSortKey = REDIS_SENT_ORDER_KEY;
+			} else {
+				currentSortKey = REDIS_MAL_ORDER_KEY;
+			}
+			socket.emit(statusEmitStr, 'Starting to remove: '+currentSortKey);
+			redisclient.del(currentSortKey,function (err, reply) {
+				if (err) {
+					logger.warning('sio :: redisCmd :: '+currentSortKey+' :: Err: '+err);
+					socket.emit(statusEmitStr, 'Err('+currentSortKey+'): '+err);
+					return;
+				}
+				socket.emit(statusEmitStr, 'Cleared: '+currentSortKey);
+			});
+		} else if(curCmd === 'clearAllKeys'){
+			logger.info('sio :: Clear All Keys');
+			var deletedKeysDefer = when.map([REDIS_SENT_HEADER, REDIS_MAL_HEADER],
+			function (redisKeyHeader) {
+				var dataKeyDefer = when.defer();
+				var dataKeyDeferRes = dataKeyDefer.resolver;
+				var dataKeysToFind = redisKeyHeader + '*';
+				socket.emit(statusEmitStr, 'Getting all keys matching: '+dataKeysToFind);
+				redisclient.keys(dataKeysToFind, function (err, reply) {
+					if (err) {
+						logger.warn('sio :: redisCmd :: clearAllKeys ('+dataKeysToFind+') :: Err: '+err);
+						socket.emit(statusEmitStr, 'Err(clearAllKeys - '+dataKeysToFind+'): '+err);
+						return dataKeyDeferRes.reject(err);
+					}
+					socket.emit(statusEmitStr, 'Got this number of keys('+dataKeysToFind+'): '+reply.length);
+					dataKeyDeferRes.resolve(reply);
+				});
+				return dataKeyDefer.promise;
+			}).then(function(allItems){
+				logger.debug('All Items: \n'+util.inspect(allItems));
+				var finalList = _.flatten(allItems);
+				logger.debug('Final List: \n'+util.inspect(finalList));
+				return finalList;
+			}).then(function (allItemsToDelete) {
+				logger.info('sio :: redisCmd :: clearAllKeys - del :: starting deletion process.');
+				logger.debug('All Items To Delete: \n'+util.inspect(allItemsToDelete));
+				return when.map(allItemsToDelete, function (itemToDelete) {
+					var deleteDefer = when.defer();
+					var deleteRes = deleteDefer.resolver;
+					redisclient.del(itemToDelete, function (err, reply) {
+						if (err) {
+							logger.warn('sio :: redisCmd :: clearAllKeys - del :: Err: '+err);
+							socket.emit(statusEmitStr, 'Err(clearAllKeys - del): '+err);
+							return deleteRes.reject(err);
+						}
+						socket.emit(statusEmitStr, 'Deleted key: '+itemToDelete+' Reply: '+reply);
+						deleteRes.resolve(reply);
+					});
+					return deleteDefer.promise;
+				});
+				//return deleteMap.promise;
+			}).then(function (keysDeleted) {
+				logger.info('sio :: redisCmd :: clearAllKeys - sort :: starting deletion process.');
+				logger.debug('Keys deleted:\n'+util.inspect(keysDeleted));
+				socket.emit(statusEmitStr, 'Deleted all key types. Total: '+keysDeleted.length+' Now clearing sort orders...');
+				return when.map([REDIS_SENT_ORDER_KEY,REDIS_MAL_ORDER_KEY], function (sortItemToDelete) {
+					var deleteSortDefer = when.defer();
+					var deleteSortRes = deleteSortDefer.resolver;
+					redisclient.del(sortItemToDelete, function (err, reply) {
+						if (err) {
+							logger.warn('sio :: redisCmd :: clearAllKeys - sort: '+itemToDelete+' :: Err: '+err);
+							socket.emit(statusEmitStr, 'Err(clearAllKeys - sort: '+itemToDelete+'): '+err);
+							return deleteSortRes.reject(err);
+						}
+						socket.emit(statusEmitStr, 'Deleted sort: '+sortItemToDelete);
+						deleteSortRes.resolve(reply);
+					});
+					return deleteSortDefer.promise;
+				});
+			}).then(function (keysDeleted) {
+				socket.emit(statusEmitStr, 'Deleted all sort order keys. Total: '+keysDeleted.length+'. Deleted all keys. Done.');
+			});
 		}
 	});
 });

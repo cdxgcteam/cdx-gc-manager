@@ -8,6 +8,11 @@ var logger = function (logStr) {
 	}
 };
 
+var updateStatus = function(statusArea, mesg) {
+	logger(mesg);
+	$('#' + statusArea).html(mesg);
+};
+
 var pushFullTable = function(intable, tabledata) {
 	//logger('pushFullTable JSON:\n'+JSON.stringify(tabledata));
 	for(var i=(tabledata.length-1); i >= 0; i--) {
@@ -85,6 +90,9 @@ var start_socket = function () {
 			socket.on('updateFullMalicious', function(data){
 				pushFullTable('mal_tbody', data);
 			});
+			socket.on('redisCmdStatus',function (data) {
+				updateStatus('redisCmdStatus', data);
+			});
 			socket.on('disconnect', function(){
 				logger('sio :: disconnected');
 			});
@@ -137,14 +145,12 @@ var runner = function () {
 						'clearSentOrder',
 						'clearMalOrder',
 						'clearAllKeys'];
-						
-		for(var i=0;i<redisCmds.length;i++) {
-			var curRedisCmd = new String(redisCmds[i]);
-			$('#' + redisCmds[i]).click(function () {
-				logger('Redis CMD :: ' + curRedisCmd);
-				socket.emit('redisCmd', {cmd: curRedisCmd});
-			});	
-		}
+		var jqFullRedisCmdList = redisCmds.join(', #');
+		$('#' + jqFullRedisCmdList).click(function (e) {
+			var curRedisCmd = this.id;
+			logger('Redis CMD :: ' + curRedisCmd);
+			socket.emit('redisCmd', {cmd: curRedisCmd});
+		});
 	}
 };
 
