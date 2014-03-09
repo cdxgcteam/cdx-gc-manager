@@ -230,22 +230,6 @@ app.use(express.logger({stream:winstonStream}));
 app.use(express.json());
 app.use(express.urlencoded());
 app.use(express.methodOverride());
-// app.use(express.basicAuth(function (user, pass, callback) {
-// 	var tempUser = 'cdxman_user_' + user;
-// 	redisclient.get(tempUser, function (err, reply) {
-// 		if (err) return callback(err);
-// 		if(_.isNull(reply)) {
-// 			var no_reply = 'login error.';
-// 			return callback(no_reply);
-// 		}
-// 		if (reply === pass) {
-// 			callback(null, user);
-// 		} else {
-// 			var bad_pass = 'login error.';
-// 			return callback(bad_pass);
-// 		}
-// 	});
-// }));
 app.use(app.router);
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(logErrors);
@@ -277,29 +261,13 @@ sio.on('connection',function (socket) {
 		var sort_key = null;
 		var emit_key = null;
 		if(tableObject.tabletype === 'mal') {
+			// Pull only mal keys
 			sort_key = REDIS_MAL_ORDER_KEY;
 			emit_key = 'updateFullMalicious';
-			// Pull all the keys:
-			// redisclient.zrevrange(REDIS_MAL_ORDER_KEY, 0, 29, function(err, reply) {
-// 				logger.info('sio :: updateFullMalicious :: Zrevrange Reply: '+util.inspect(reply));
-// 				if (reply.length == 0) {
-// 					main_resolver.reject('no_data');
-// 				} else {
-// 					main_resolver.resolve(reply);
-// 				}
-// 			});
 		} else if (tableObject.tabletype === 'alltasks') {
 			// Pull all the keys:
 			sort_key = REDIS_SENT_ORDER_KEY;
-			emit_key = 'updateFullMalicious';
-			// redisclient.zrevrange(REDIS_SENT_ORDER_KEY, 0, 29, function(err, reply) {
-// 				logger.info('sio :: updateFullAllTasks :: Zrevrange Reply: '+util.inspect(reply));
-// 				if (reply.length == 0) {
-// 					main_resolver.reject('no_data');
-// 				} else {
-// 					main_resolver.resolve(reply);
-// 				}
-// 			});
+			emit_key = 'updateFullAllTasks';
 		}
 		
 		if (tableObject.updatetype === 'full') {
@@ -314,9 +282,12 @@ sio.on('connection',function (socket) {
 			});
 		} else if (tableObject.updatetype === 'update') {
 			var currentTime = new Date();
-			var start_time_ms = currentTime.getTime();
-			var end_time_ms = tableObject.lasttimems;
-			redisclient.zrevrangebyscore(sort_key, start_time_ms, end_time_ms, function(err, reply) {
+			var endTimeObj = new Date();
+			endTimeObj.setTime(tableObject.lasttimems);
+			
+			var startTimeMS = currentTime.getTime();
+			var endTimeMS = endTimeObj.getTime();
+			redisclient.zrevrangebyscore(sort_key, startTimeMS, endTimeMS, function(err, reply) {
 				logger.info('sio :: updateFullMalicious :: Zrevrangebyscore Reply: '+util.inspect(reply));
 				if (reply.length == 0) {
 					main_resolver.reject('no_data');
@@ -339,6 +310,19 @@ sio.on('connection',function (socket) {
 			logger.info('sio :: updateFullTable :: ' + emit_key);
 			socket.emit(emit_key, fullTableData);
 		});	
+	});
+	socket.on('redisCmd', function (redisCmdObj) {
+		if(redisCmdObj.cmd === 'exportAllKeys' || 
+		   redisCmdObj.cmd === 'exportMalKeys')
+		{
+			logger.info('sio :: TODO Export All Keys');
+		} else if(redisCmdObj.cmd === 'clearSentOrder' || 
+		          redisCmdObj.cmd === 'clearMalOrder')
+		{
+			logger.info('sio :: TODO Clear Sent or Mal Orders');
+		} else if(redisCmdObj.cmd === 'clearAllKeys'){
+			logger.info('sio :: TODO Clear All Keys');
+		}
 	});
 });
 // Launch HTTPS Server:

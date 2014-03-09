@@ -1,8 +1,15 @@
 //START
 (function(){
 
+var logger = function (logStr) {
+	var loggerOn = true;
+	if (loggerOn) {
+		console.log(logStr);
+	}
+};
+
 var pushFullTable = function(intable, tabledata) {
-	//console.log('pushFullTable JSON:\n'+JSON.stringify(tabledata));
+	//logger('pushFullTable JSON:\n'+JSON.stringify(tabledata));
 	for(var i=(tabledata.length-1); i >= 0; i--) {
 		addNewRow(
 			intable,
@@ -21,6 +28,13 @@ var pushFullTable = function(intable, tabledata) {
 var addNewRow = function (tbodyStr, id, url, poc, minTime, workTime, submittedTime, submittedTimeMS, completedCount) {
 	var tempStr = '#' + tbodyStr;
 	var baseTable = $(tempStr);
+	
+	var firstRowIDCheck = $(tempStr+' tr:first td:first');
+	if (firstRowIDCheck.length == 1 && firstRowIDCheck[0].textContent === id) {
+		logger('addNewRow :: The recieved row is a repeat of the first one ...');
+		return 0;
+	}
+	// Else continue adding the new row.
 	if (baseTable.length == 1) {
 
 		// Create a new row:
@@ -63,7 +77,7 @@ var start_socket = function () {
 	return $.Deferred(function (defer) {
 		socket = io(document.location.origin);
 		socket.on('connect', function(){
-			console.log('sio :: connected');
+			logger('sio :: connected');
 			defer.resolve(true);
 			socket.on('updateFullAllTasks', function(data){
 				pushFullTable('tasks_tbody', data);
@@ -72,7 +86,7 @@ var start_socket = function () {
 				pushFullTable('mal_tbody', data);
 			});
 			socket.on('disconnect', function(){
-				console.log('sio :: disconnected');
+				logger('sio :: disconnected');
 			});
 		});
 	}).promise();
@@ -93,7 +107,7 @@ var runner = function () {
 	}
 
 	if (!_.isNull(table_exists)){
-		console.log('sio :: updateFullTable command sent');
+		logger('sio :: updateFullTable command sent');
 		
 		socket.emit('updateFullTable', {
 			'tabletype': table_type,
@@ -101,27 +115,36 @@ var runner = function () {
 		});
 		
 		setInterval(function () {
-			console.log('sio :: starting to update table...');
-			var lasttimems = $('#tasks_tbody tr:first td:contains("ms)")')[0].textContent.match(/\((\d+)\s+ms\)/)[1];
-			socket.emit('updateFullTable', {
-				'tabletype': table_type,
-				'updatetype': 'update'
-				'lasttimems': lasttimems
-			});
+			logger('sio :: starting to update table...');
+			var lastTimeObj = $('#tasks_tbody tr:first td:contains("ms)")');
+			if (lastTimeObj.length == 1) {
+				logger('sio :: first time obj found...');
+				var lastTimeMS = lastTimeObj[0].textContent.match(/\((\d+)\s+ms\)/)[1];
+				logger('sio :: requesting updates...');
+				socket.emit('updateFullTable', {
+					'tabletype': table_type,
+					'updatetype': 'update',
+					'lasttimems': lastTimeMS
+				});
+			}
 		},5000);
 	}
 
 	// For the admin page:
 	if (document.location.pathname === '/admin'){
-		$('#clearSentOrder').submit(function () {
-			console.log('Clearing sent order...');
-			socket.emit('clearSentOrder');
-		});
-	
-		$('#clearAllKeys').submit(function () {	
-			console.log('Clearing all keys...');
-			socket.emit('clearAllKeys');
-		});
+		var redisCmds = ['exportAllKeys',
+						'exportMalKeys',
+						'clearSentOrder',
+						'clearMalOrder',
+						'clearAllKeys'];
+						
+		for(var i=0;i<redisCmds.length;i++) {
+			var curRedisCmd = new String(redisCmds[i]);
+			$('#' + redisCmds[i]).click(function () {
+				logger('Redis CMD :: ' + curRedisCmd);
+				socket.emit('redisCmd', {cmd: curRedisCmd});
+			});	
+		}
 	}
 };
 

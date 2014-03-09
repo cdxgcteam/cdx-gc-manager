@@ -5,37 +5,51 @@ block content
 		div(class='row admininput')
 			.col-md-6
 				h1 Malicious Input
-				.row
+				div(class='row admininput')
 					div(class='panel panel-danger')
 						div(class='panel-heading')
 							h4(class='panel-title') Malicious Submission Status
-						div#redisCmdStatus(class='panel-body') ...Status...
-				form#malinput(role='form')
-					.form-group
-						label(for='inputURL') URL
-						input#inputURL(type='text', class='form-control', placeholder='Enter or copy URL')
-					.form-group
-						label(for='inputPOC') POC
-						input#inputPOC(type='text', class='form-control', placeholder='Enter POC')
-					.form-group
-						label(for='inputMinTime') Minimum Time
-						input#inputMinTime(type='text', class='form-control', placeholder='Enter Minimum Time')
-					button(type='submit',class='btn btn-default') Submit
+						div#malCmdStatus(class='panel-body') ...Status...
+					form#malinput(role='form')
+						.form-group
+							label(for='inputURL') URL
+							input#inputURL(type='text', class='form-control', placeholder='Enter or copy URL')
+						.form-group
+							label(for='inputPOC') POC
+							input#inputPOC(type='text', class='form-control', placeholder='Enter POC')
+						.form-group
+							label(for='inputMinTime') Minimum Time
+							input#inputMinTime(type='text', class='form-control', placeholder='Enter Minimum Time')
+						button(type='submit',class='btn btn-default') Submit
 			.col-md-6
+				h1 Send Other Command
+				div(class='row admininput')
+					div(class='panel panel-warning')
+						div(class='panel-heading')
+							h4(class='panel-title') Other Command Submission Status
+						div#otherCmdStatus(class='panel-body') ...Status...
+					form#othercmdinput(role='form')
+						.form-group
+							label(for='commandChoice') Command Choices
+							select#commandChoice(class='form-control')
+								option Pause
+								option Quit
+						.form-group#pauseTimeGroup
+							label(for='pauseTime') Pause Time
+							input#pauseTime(type='text', class='form-control', placeholder='Enter Pause Time in MS',disabled)
+						button(type='submit',class='btn btn-default',disabled) Submit
 				h1 Redis Options
-				.row
+				div(class='row admininput')
 					div(class='panel panel-info')
 						div(class='panel-heading')
 							h4(class='panel-title') Redis Command Status
 						div#redisCmdStatus(class='panel-body') ...Status...
-				.row
 					h5 Redis Export Commands
 					ul(class='list-group')
 						li(class='list-group-item')
 							button#exportAllKeys(class='btn btn-default') Export All Keys
 						li(class='list-group-item')
 							button#exportMalKeys(class='btn btn-default') Export Malicious Keys
-				.row
 					h5 Redis Clear Commands
 					ul(class='list-group')
 						li(class='list-group-item')
@@ -44,5 +58,3 @@ block content
 							button#clearMalOrder(class='btn btn-default') Clear Malicious Order
 						li(class='list-group-item')
 							button#clearAllKeys(class='btn btn-default') Clear All Keys
-						li(class='list-group-item')
-							button#exportAllKeys(class='btn btn-default') Export All Keys
