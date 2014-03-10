@@ -89,6 +89,11 @@ function errorHandler(err, req, res, next) {
 // ----------------------------
 // GLOBALS:
 // ----------------------------
+var POSSIBLE_SEED_KEY = [
+'=Z<x.hVR87OG&gc,N!WfS7vv#cuanX|eyc{0mz6v]:zQ`>*x?m?-tvv#RAP&:1B)}<Y&rX!zOG3I[b=M:t`EXSP/t>Dv9pS/@;BSnn!4DuE`=]zgl0<l+YY&)%M*|hBWx4WGE6Tknlu5mJv}-H&x>ZRvu_(NmAdk@Ua.w,#e5VVG+lD=KJ+#[&-X&OnC[+aIY:MI|5rw,,;C>.w#/Q)^!c3!Sz1|vqg6v@!o+^vA!,~ux)~1hi-c~.)#OuY_0?4+',
+'Q+{]-H_dgFAl`bhw%f1{yv~IdV1FS*s:e$v:gVE*J]Iv4aXwzf!`pEOm/+*BxZvpjHA7H=_^qg|?v{}XB8*6:d&~B+m7tv}@WV~<59b$q$z|!N&jZbm?LUR@[U6I$+{t7iiT~PvJ=JTC)SgH~CO78)=c$Hqh$f~xneBpv;Uu#zwh6DmI&Fuvl6`0|_9fTRpj=cFGQ;*LS"(|u$%`yb{/TUz<Fi<Y/,(N_|jpf]1Y4r!zI$R+pO#rU*gI-w74sK^3',
+'*Ef;}$Y:p`zinV~4}eA6IVbcWs0DRavU~Hc(ox1ooNMJlxo;hEvN/vVt[q-xQMDS_;[~UrntFZdP72<=UlQvKb.8~F{eo%&z(PGf0KcxZC5B.k}H?]Z8v}7X}IhBi(s)T`6d>7pO(3x/vEK^p&gm,wL-gF9ux?GoqojLiA;{Tlxf-bhMpxar-J>b[G6:~Icbz8Py?a8l;_rZ4TPd<w&0y$~QWt(b"i8[VAixi"s_O-Y>cShb-mE_q1xm|3/2~%?Y'
+];
 var WEB_SERVER_PORT = 3443;
 var BASE_CERT_PATH = '/home/cdxgcserver/cdx_gc_certs2';
 var CERT_OPTS = {
@@ -319,6 +324,11 @@ sio.on('connection',function (socket) {
 		   curCmd === 'exportMalKeys')
 		{
 			logger.info('sio :: TODO Export All Keys');
+			// Set up appending file stream
+			// File format: <type: export_mal_keys or export_all_keys>_<day>_<mon>_<year>_<time 24h:mins:MS>.csv
+			// Use async to keep pulling chunks
+			// For each chunk, build the csv output and the write it to the stream
+			// Keep going until the cursor is back to zero.
 		} else if(curCmd === 'clearSentOrder' || 
 		          curCmd === 'clearMalOrder')
 		{
@@ -401,6 +411,7 @@ sio.on('connection',function (socket) {
 			});
 		}
 	});
+	//socket.on('malInput');
 });
 // Launch HTTPS Server:
 main_https.listen(app.get('port'), function(){

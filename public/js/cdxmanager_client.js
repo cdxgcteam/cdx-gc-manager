@@ -146,10 +146,15 @@ var runner = function () {
 						'clearMalOrder',
 						'clearAllKeys'];
 		var jqFullRedisCmdList = redisCmds.join(', #');
-		$('#' + jqFullRedisCmdList).click(function (e) {
+		$('#' + jqFullRedisCmdList).click(function (evt) {
 			var curRedisCmd = this.id;
 			logger('Redis CMD :: ' + curRedisCmd);
 			socket.emit('redisCmd', {cmd: curRedisCmd});
+		});
+		
+		//Malicious Form Submittal:
+		$('#malInput').submit(function (evt) {
+			
 		});
 	}
 };
