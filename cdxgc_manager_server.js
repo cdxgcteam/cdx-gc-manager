@@ -21,11 +21,15 @@ var fs = require('fs');
 var crypto = require('crypto');
 var os = require('os');
 
-// - Underscore
-var _ = require('underscore');
+// - Underscore/Lodash
+//var _ = require('underscore');
+var _ = require('lodash-node');
 
 // - Promises...
 var when = require('when');
+
+// - Async
+var async = require('async');
 
 // - Random number generators:
 var wellprng = require('well-rng');
@@ -49,6 +53,12 @@ var redispublish = null;
 // - AMQP -> RabbitMQ Connection Library
 var amqp = require('amqplib');
 var coreChannel = null;
+
+// - csv
+var csv = require('csv');
+
+// - moment - Date Formatter:
+var moment = require('moment');
 
 // - Logging
 var winston = require('winston');
@@ -84,7 +94,7 @@ function clientErrorHandler(err, req, res, next) {
 // 'catch-all' error handler
 function errorHandler(err, req, res, next) {
   res.status(500);
-  res.render('error', { error: err });
+  res.send(500, { error: 'Something failed!!' });
 }
 // ----------------------------
 // GLOBALS:
@@ -95,6 +105,8 @@ var POSSIBLE_SEED_KEY = [
 '*Ef;}$Y:p`zinV~4}eA6IVbcWs0DRavU~Hc(ox1ooNMJlxo;hEvN/vVt[q-xQMDS_;[~UrntFZdP72<=UlQvKb.8~F{eo%&z(PGf0KcxZC5B.k}H?]Z8v}7X}IhBi(s)T`6d>7pO(3x/vEK^p&gm,wL-gF9ux?GoqojLiA;{Tlxf-bhMpxar-J>b[G6:~Icbz8Py?a8l;_rZ4TPd<w&0y$~QWt(b"i8[VAixi"s_O-Y>cShb-mE_q1xm|3/2~%?Y'
 ];
 var WEB_SERVER_PORT = 3443;
+var BASE_CSV_PATH = './public/csv';
+var BASE_CSV_URL_PATH = '/csv';
 var BASE_CERT_PATH = '/home/cdxgcserver/cdx_gc_certs2';
 var CERT_OPTS = {
 	cert: fs.readFileSync(BASE_CERT_PATH + '/manager/cert.pem'),
@@ -230,7 +242,7 @@ var app = express();
 app.set('port', process.env.PORT || cdxgc_man_args.web_port);
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'jade');
-app.use(express.favicon());
+app.use(express.favicon('public/img/favicon.ico'));
 app.use(express.logger({stream:winstonStream}));
 app.use(express.json());
 app.use(express.urlencoded());
@@ -323,12 +335,94 @@ sio.on('connection',function (socket) {
 		if(curCmd === 'exportAllKeys' || 
 		   curCmd === 'exportMalKeys')
 		{
-			logger.info('sio :: TODO Export All Keys');
-			// Set up appending file stream
-			// File format: <type: export_mal_keys or export_all_keys>_<day>_<mon>_<year>_<time 24h:mins:MS>.csv
-			// Use async to keep pulling chunks
-			// For each chunk, build the csv output and the write it to the stream
-			// Keep going until the cursor is back to zero.
+			var fileHeader = null;
+			var currentSortKey = null;
+			var currentHeader = null;
+			if (curCmd === 'exportAllKeys') {
+				fileHeader = '/export_all_keys_';
+				currentSortKey = REDIS_SENT_ORDER_KEY;
+				currentHeader = REDIS_SENT_HEADER;
+			} else if (curCmd === 'exportMalKeys'){
+				fileHeader = '/export_mal_keys_';
+				currentSortKey = REDIS_MAL_ORDER_KEY;
+				currentHeader = REDIS_MAL_HEADER;
+			}
+			
+			if (!_.isNull(fileHeader) && !_.isNull(currentSortKey)) {
+				var currentDate = moment().format('DD_MM_YYYY_HHmmssZZ');
+				var finalFileName = BASE_CSV_PATH + fileHeader + currentDate + ".csv";
+				var finalUrlName = BASE_CSV_URL_PATH + fileHeader + currentDate + ".csv";
+				socket.emit(statusEmitStr, 'Opening File for Writing: '+finalUrlName);
+				//var exportFileStream = fs.createWriteStream(finalFileName, {flags: 'a', encoding: null, mode: 0666});
+				// Do the scan and get the chunks processed.
+				var headerRegex = new RegExp(currentHeader,'i');
+				logger.info('sio :: redisCmd :: Starting to export ('+currentSortKey+')');
+				var scanState = 0;
+				async.doUntil(
+					function (callback) {
+						var getExport = when.promise(function (resolve, reject, notify) {
+							logger.debug('in when...1');
+							redisclient.zscan(currentSortKey,scanState,function (err, reply) {
+								logger.debug('Reply: \n'+util.inspect(reply));
+								if (err) {
+									logger.warning('sio :: redisCmd :: export ('+currentSortKey+') :: Err: '+err);
+									socket.emit(statusEmitStr, 'Export Err('+currentSortKey+'): '+err);
+									reject(err);
+									return;
+								}
+								scanState = reply[0]; // Reply[0] == the cursor number.
+								resolve(reply[1]);
+							});
+						}).then(function (data) {
+							logger.debug('in when...2:\n'+util.inspect(data));
+							var dataFilter = _.filter(data, function (item) {
+								logger.debug('item: ' + item + ' match: ' + util.inspect(headerRegex.test(item)));
+								return headerRegex.test(item);
+							});
+							return dataFilter;
+						}).then(function (keyList) {
+							logger.debug('in when...3');
+							logger.info('sio :: redisCmd :: export ('+currentSortKey+') keylist:\n'+util.inspect(keyList));
+							return when.map(keyList, function (itemToGetData) {
+								var dataDefer = when.defer();
+								var dataDeferRes = dataDefer.resolver;
+								redisclient.hgetall(itemToGetData, function (err, reply) {
+									logger.debug('sio :: redisCmd :: export ('+currentSortKey+') reply: '+util.inspect(reply));
+									dataDeferRes.resolve(reply);
+								});
+								return dataDefer.promise;
+							});
+						}).then(function (finalOutput) {
+							logger.debug('FinalOutput: \n'+util.inspect(finalOutput));
+							csv()
+							.from.array(finalOutput)
+							.to.path(finalFileName, {
+								flags: 'a',
+								mode: 0666,
+								rowDelimiter: 'auto'
+								//eof: true
+								// columns: ["srcSystem","poc","cmd","taskCreateDate","taskCreateMS","taskid","urlNum","url","minWorkTime","workTime"],
+								// header: true
+			  				})
+							.on('end', function(count){
+								logger.debug('sio :: redisCmd :: export ('+currentSortKey+') :: count: '+count);
+							});
+							callback(null);
+						});
+					},
+					function () {
+						socket.emit(statusEmitStr, 'Pulling data together...');
+						return scanState === "0";
+					},
+					function (err) {
+						socket.emit(statusEmitStr, 'File Ready: <a href=\"'+finalUrlName+'\">'+finalUrlName+'</a>');
+						logger.info('Done exporting ('+currentSortKey+') :: File Path: '+finalFileName);
+					}
+				);
+			} else {
+				logger.warning('sio :: redisCmd :: export :: Err: '+err);
+				socket.emit(statusEmitStr, 'Err(export): '+err);
+			}
 		} else if(curCmd === 'clearSentOrder' || 
 		          curCmd === 'clearMalOrder')
 		{
