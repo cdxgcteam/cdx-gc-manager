@@ -353,7 +353,7 @@ sio.on('connection',function (socket) {
 				var finalFileName = BASE_CSV_PATH + fileHeader + currentDate + ".csv";
 				var finalUrlName = BASE_CSV_URL_PATH + fileHeader + currentDate + ".csv";
 				socket.emit(statusEmitStr, 'Opening File for Writing: '+finalUrlName);
-				//var exportFileStream = fs.createWriteStream(finalFileName, {flags: 'a', encoding: null, mode: 0666});
+				var exportFileStream = fs.createWriteStream(finalFileName, {flags: 'a', encoding: null, mode: 0666});
 				// Do the scan and get the chunks processed.
 				var headerRegex = new RegExp(currentHeader,'i');
 				logger.info('sio :: redisCmd :: Starting to export ('+currentSortKey+')');
@@ -371,7 +371,11 @@ sio.on('connection',function (socket) {
 									return;
 								}
 								scanState = reply[0]; // Reply[0] == the cursor number.
-								resolve(reply[1]);
+								if (reply[1].length > 0){
+									resolve(reply[1]);
+								} else {
+									reject('no data to process');
+								}
 							});
 						}).then(function (data) {
 							logger.debug('in when...2:\n'+util.inspect(data));
@@ -380,33 +384,35 @@ sio.on('connection',function (socket) {
 								return headerRegex.test(item);
 							});
 							return dataFilter;
+						},function (rejectReason) {
+							logger.warn('sio :: redisCmd :: export ('+currentSortKey+') :: reject reason: '+ rejectReason);
+							callback(null);
+							return [];
 						}).then(function (keyList) {
 							logger.debug('in when...3');
 							logger.info('sio :: redisCmd :: export ('+currentSortKey+') keylist:\n'+util.inspect(keyList));
-							return when.map(keyList, function (itemToGetData) {
-								var dataDefer = when.defer();
-								var dataDeferRes = dataDefer.resolver;
-								redisclient.hgetall(itemToGetData, function (err, reply) {
-									logger.debug('sio :: redisCmd :: export ('+currentSortKey+') reply: '+util.inspect(reply));
-									dataDeferRes.resolve(reply);
+							if (keyList.length > 0) {
+								return when.map(keyList, function (itemToGetData) {
+									var dataDefer = when.defer();
+									var dataDeferRes = dataDefer.resolver;
+									redisclient.hgetall(itemToGetData, function (err, reply) {
+										logger.debug('sio :: redisCmd :: export ('+currentSortKey+') reply: '+util.inspect(reply));
+										dataDeferRes.resolve(reply);
+									});
+									return dataDefer.promise;
 								});
-								return dataDefer.promise;
-							});
+							}
 						}).then(function (finalOutput) {
 							logger.debug('FinalOutput: \n'+util.inspect(finalOutput));
-							csv()
-							.from.array(finalOutput)
-							.to.path(finalFileName, {
-								flags: 'a',
-								mode: 0666,
-								rowDelimiter: 'auto'
-								//eof: true
-								// columns: ["srcSystem","poc","cmd","taskCreateDate","taskCreateMS","taskid","urlNum","url","minWorkTime","workTime"],
-								// header: true
-			  				})
-							.on('end', function(count){
-								logger.debug('sio :: redisCmd :: export ('+currentSortKey+') :: count: '+count);
-							});
+							if (finalOutput.length > 0) {
+								csv()
+								.from.array(finalOutput, {
+									columns:['cmd','taskid','poc','srcSystem','minWorkTime','workTime','taskCreateMS','taskCreateDate','urlNum','url']
+								}).to.stream(exportFileStream, {
+									end: false,
+									eof: true
+								});
+							}
 							callback(null);
 						});
 					},
