@@ -152,9 +152,80 @@ var runner = function () {
 			socket.emit('redisCmd', {cmd: curRedisCmd});
 		});
 		
+		//General Command Validators/Actions:
+		$('#commandChoice').change(function (evt) {
+			var currentValue = $(this).val();
+			if(currentValue === 'Pause'){
+				$('#pauseTime').prop('disabled', false)
+			} else {
+				$('#pauseTime').prop('disabled', true)
+			}
+		});
+		
+		$('#pauseTime, #malInputMinTime').change(function (evt) {
+			var currentID = $(this).attr('id');
+			var currentValue = $(this).val();
+			var idHandle = '#'+currentID;
+			currentValue = _.parseInt(currentValue);
+			if(!_.isNaN(currentValue)){
+				$(idHandle + ' ~ span').remove();
+				$(this).parent().removeClass('has-error has-feedback');
+				$(this).parent().addClass('has-success has-feedback');
+				$(this).parent().append('<span class="glyphicon glyphicon-ok form-control-feedback"></span>');
+			} else {
+				$(idHandle+' ~ span').remove();
+				$(this).parent().removeClass('has-success has-feedback');
+				$(this).parent().addClass('has-error has-feedback');
+				$(this).parent().append('<span class="glyphicon glyphicon-remove form-control-feedback"></span>');
+			}
+		});
+		
+		//Malicious Form Validators:
+		$('#malInputURL').change(function (evt) {
+			var currentValue = $(this).val();
+			var valMatches = currentValue.match(/htt(p|ps):\/\//i);
+			if(!_.isNull(valMatches)){
+				$('#malInputURL ~ span').remove();
+				$('#malInputURL').parent().removeClass('has-error has-feedback');
+				$('#malInputURL').parent().addClass('has-success has-feedback');
+				$('#malInputURL').parent().append('<span class="glyphicon glyphicon-ok form-control-feedback"></span>');
+			} else {
+				$('#malInputURL ~ span').remove();
+				$('#malInputURL').parent().removeClass('has-success has-feedback');
+				$('#malInputURL').parent().addClass('has-error has-feedback');
+				$('#malInputURL').parent().append('<span class="glyphicon glyphicon-remove form-control-feedback"></span>');
+			}
+		});
+		
+		// $('#malInputMinTime').change(function (evt) {
+		// 	var currentValue = $(this).val();
+		// 	currentValue = _.parseInt(currentValue);
+		// 	if(!_.isNaN(currentValue)){
+		// 		$('#malInputMinTime ~ span').remove();
+		// 		$('#malInputMinTime').parent().removeClass('has-error has-feedback');
+		// 		$('#malInputMinTime').parent().addClass('has-success has-feedback');
+		// 		$('#malInputMinTime').parent().append('<span class="glyphicon glyphicon-ok form-control-feedback"></span>');
+		// 	} else {
+		// 		$('#malInputMinTime ~ span').remove();
+		// 		$('#malInputMinTime').parent().removeClass('has-success has-feedback');
+		// 		$('#malInputMinTime').parent().addClass('has-error has-feedback');
+		// 		$('#malInputMinTime').parent().append('<span class="glyphicon glyphicon-remove form-control-feedback"></span>');
+		// 	}
+		// });
+		
 		//Malicious Form Submittal:
 		$('#malInput').submit(function (evt) {
-			
+			var malInputURL = $('#malInputURL')[0].value;
+			var malInputPOC = $('#malInputPOC')[0].value;
+			var malInputMinTime = $('#malInputMinTime')[0].value;
+			logger('malInput :: Recieved URL: '+malInputURL);
+			logger('malInput :: Recieved POC: '+malInputPOC);
+			logger('malInput :: Recieved MinTime: '+malInputMinTime);
+			socket.emit('malInput', {
+				url: malInputURL,
+				poc: malInputPOC,
+				minTime: malInputMinTime
+			});
 		});
 	}
 };

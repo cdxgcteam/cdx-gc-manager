@@ -12,13 +12,13 @@ block content
 						div#malCmdStatus(class='panel-body') ...Status...
 					form#malInput(role='form')
 						.form-group
-							label(for='inputURL') URL
+							label(class='control-label', for='inputURL') URL
 							input#malInputURL(type='text', class='form-control', placeholder='Enter or copy URL')
 						.form-group
-							label(for='inputPOC') POC
+							label(class='control-label', for='inputPOC') POC
 							input#malInputPOC(type='text', class='form-control', placeholder='Enter POC')
 						.form-group
-							label(for='inputMinTime') Minimum Time
+							label(class='control-label', for='inputMinTime') Minimum Time
 							input#malInputMinTime(type='text', class='form-control', placeholder='Enter Minimum Time')
 						button(type='submit',class='btn btn-default') Submit
 			.col-md-6
@@ -36,8 +36,8 @@ block content
 								option Quit
 						.form-group#pauseTimeGroup
 							label(for='pauseTime') Pause Time
-							input#pauseTime(type='text', class='form-control', placeholder='Enter Pause Time in MS',disabled)
-						button(type='submit',class='btn btn-default',disabled) Submit
+							input#pauseTime(type='text', class='form-control', placeholder='Enter Pause Time in MS')
+						button(type='submit',class='btn btn-default') Submit
 				h1 Redis Options
 				div(class='row admininput')
 					div(class='panel panel-info')

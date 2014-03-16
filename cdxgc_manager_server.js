@@ -511,7 +511,10 @@ sio.on('connection',function (socket) {
 			});
 		}
 	});
-	//socket.on('malInput');
+	socket.on('malInput', function (malInputObj) {
+		// Handle all the command output:
+		
+	});
 });
 // Launch HTTPS Server:
 main_https.listen(app.get('port'), function(){
