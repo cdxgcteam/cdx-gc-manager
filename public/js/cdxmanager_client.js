@@ -162,6 +162,7 @@ var runner = function () {
 			}
 		});
 		
+		// Malicious Form and General Command Form Time Validator
 		$('#pauseTime, #malInputMinTime').change(function (evt) {
 			var currentID = $(this).attr('id');
 			var currentValue = $(this).val();
@@ -197,22 +198,6 @@ var runner = function () {
 			}
 		});
 		
-		// $('#malInputMinTime').change(function (evt) {
-		// 	var currentValue = $(this).val();
-		// 	currentValue = _.parseInt(currentValue);
-		// 	if(!_.isNaN(currentValue)){
-		// 		$('#malInputMinTime ~ span').remove();
-		// 		$('#malInputMinTime').parent().removeClass('has-error has-feedback');
-		// 		$('#malInputMinTime').parent().addClass('has-success has-feedback');
-		// 		$('#malInputMinTime').parent().append('<span class="glyphicon glyphicon-ok form-control-feedback"></span>');
-		// 	} else {
-		// 		$('#malInputMinTime ~ span').remove();
-		// 		$('#malInputMinTime').parent().removeClass('has-success has-feedback');
-		// 		$('#malInputMinTime').parent().addClass('has-error has-feedback');
-		// 		$('#malInputMinTime').parent().append('<span class="glyphicon glyphicon-remove form-control-feedback"></span>');
-		// 	}
-		// });
-		
 		//Malicious Form Submittal:
 		$('#malInput').submit(function (evt) {
 			var malInputURL = $('#malInputURL')[0].value;
@@ -226,6 +211,7 @@ var runner = function () {
 				poc: malInputPOC,
 				minTime: malInputMinTime
 			});
+			evt.preventDefault();
 		});
 	}
 };

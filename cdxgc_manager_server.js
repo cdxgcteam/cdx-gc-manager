@@ -104,6 +104,7 @@ var POSSIBLE_SEED_KEY = [
 'Q+{]-H_dgFAl`bhw%f1{yv~IdV1FS*s:e$v:gVE*J]Iv4aXwzf!`pEOm/+*BxZvpjHA7H=_^qg|?v{}XB8*6:d&~B+m7tv}@WV~<59b$q$z|!N&jZbm?LUR@[U6I$+{t7iiT~PvJ=JTC)SgH~CO78)=c$Hqh$f~xneBpv;Uu#zwh6DmI&Fuvl6`0|_9fTRpj=cFGQ;*LS"(|u$%`yb{/TUz<Fi<Y/,(N_|jpf]1Y4r!zI$R+pO#rU*gI-w74sK^3',
 '*Ef;}$Y:p`zinV~4}eA6IVbcWs0DRavU~Hc(ox1ooNMJlxo;hEvN/vVt[q-xQMDS_;[~UrntFZdP72<=UlQvKb.8~F{eo%&z(PGf0KcxZC5B.k}H?]Z8v}7X}IhBi(s)T`6d>7pO(3x/vEK^p&gm,wL-gF9ux?GoqojLiA;{Tlxf-bhMpxar-J>b[G6:~Icbz8Py?a8l;_rZ4TPd<w&0y$~QWt(b"i8[VAixi"s_O-Y>cShb-mE_q1xm|3/2~%?Y'
 ];
+var CHOOSEN_SEED = null;
 var WEB_SERVER_PORT = 3443;
 var BASE_CSV_PATH = './public/csv';
 var BASE_CSV_URL_PATH = '/csv';
@@ -146,6 +147,84 @@ cdxgc_man_args
 // Redis and AMQP:
 // ----------------------------
 
+var MAL_LOCK_KEY = 'cdx_mal_lock_key';
+var CMD_LOCK_KEY = 'cdx_cmd_lock_key';
+var redisLock = {
+	lockKeyHash: null,
+	intervalCounter: 0,
+	intervalObj: null,
+	
+	// lockKey : Redis Key to lock against
+	// maxTime : In milliseconds, the expire time for the key
+	setLock: function (lockKey, maxTime, maxRetries, maxTimeBetweenTries) {
+		logger.debug('redisLock :: setLock :: lockKey: '+lockKey+' maxTime: '+maxTime+' maxRetries: '+maxRetries+' maxTimeBetweenTries: ', maxTimeBetweenTries);
+
+		// Setup promise:
+		var lockDefer = when.defer();
+		var lockDeferRes = lockDefer.resolver;
+		
+		// Build lock string:
+		var currentDate = new Date();
+		var currentDigest = currentDate.toJSON() + POSSIBLE_SEED_KEY[CHOOSEN_SEED];
+		var shasum = crypto.createHash('sha1');
+		shasum.update(currentDigest, 'utf8');
+		var hashout = shasum.digest('hex');
+		
+		// Build set command:
+		var curMaxRetries = maxRetries || 5;
+		var curMaxTimeBetweenTries = maxTimeBetweenTries || 50;
+		var setArgs = [lockKey, hashout, 'PX', maxTime, 'NX'];
+		logger.debug('redisLock :: setLock :: Max Retries: '+curMaxRetries+' Max Time Between Tries: '+curMaxTimeBetweenTries);
+		logger.debug('redisLock :: setLock :: Set Command Input: '+util.inspect(setArgs));
+		redisLock.intervalObj = setInterval(function () {
+			redisclient.set(setArgs, function (err, reply) {
+				logger.debug('redisLock :: setLock :: Reply: '+reply+' Err: '+err);
+				if(reply === 'OK') {
+					redisLock.lockKeyHash = hashout;
+					lockDeferRes.resolve(hashout);
+					clearInterval(redisLock.intervalObj);
+				} else {
+					redisLock.intervalCounter++;
+					if(redisLock.intervalCounter == curMaxRetries) {
+						clearInterval(redisLock.intervalObj);
+						lockDeferRes.reject('lockFail');
+					}
+				}
+			});
+		}, curMaxTimeBetweenTries);
+		
+		return lockDefer.promise;
+	},
+	releaseLock: function (lockKey, lockHash) {
+		logger.debug('redisLock :: releaseLock :: lockKey: '+lockKey+' lockHash: '+lockHash);
+		// release lock Script:
+		var releaseLuaCode = 'if redis.call("get",KEYS[1]) == ARGV[1]\nthen\n    return redis.call("del",KEYS[1])\nelse\n    return 0\nend';
+		
+		// release lock defer:
+		var lockDefer = when.defer();
+		var lockDeferRes = lockDefer.resolver;
+		
+		// Use the hash provided unless one isn't and then take what we have on file in the object:
+		var curLockHash = null;
+		if (_.isUndefined(lockHash)) {
+			curLockHash = redisLock.lockKeyHash;
+		} else {
+			curLockHash = lockHash;
+		}
+		var evalArgs = [releaseLuaCode, 1, lockKey, curLockHash];
+		logger.debug('redisLock :: releaseLock :: Eval Command Input: '+util.inspect(evalArgs));
+		redisclient.eval(evalArgs, function (err, reply) {
+			logger.debug('redisLock :: releaseLock :: Reply: '+reply+' Err: '+err);
+			if (reply == 1){
+				lockDeferRes.resolve(reply);
+			} else {
+				lockDeferRes.reject(err);
+			}
+		});
+		return lockDefer.promise;
+	}
+};
+
 var redisCmdRecieve = function (channel, message) {
 	logger.debug('redisCmdRecieve :: channel: ' + channel + ' :: msg: ' + message);
 };
@@ -160,6 +239,9 @@ var starter = function() {
 	logger.info('AMQP Port: ' + cdxgc_man_args.amqp_port);
 	logger.info('Redis Server: ' + cdxgc_man_args.redis_host);
 	logger.info('Redis Port: ' + cdxgc_man_args.redis_port);
+
+	CHOOSEN_SEED = well.randInt(0, (POSSIBLE_SEED_KEY.length-1));
+	logger.info('Choosen Seed [' + CHOOSEN_SEED + ']: ' + POSSIBLE_SEED_KEY[CHOOSEN_SEED]);
 
 	// Redis Setup:
 	redisclient = redis.createClient(cdxgc_man_args.redis_port, cdxgc_man_args.redis_host);
@@ -512,8 +594,13 @@ sio.on('connection',function (socket) {
 		}
 	});
 	socket.on('malInput', function (malInputObj) {
+		logger.debug('malInputObj: '+util.inspect(malInputObj));
 		// Handle all the command output:
-		
+		var lockProm = redisLock.setLock(MAL_LOCK_KEY, 1000);
+		lockProm.then(function (lockHash) {
+			logger.debug('malInput :: lockHash: '+lockHash);
+			redisLock.releaseLock(MAL_LOCK_KEY);
+		});
 	});
 });
 // Launch HTTPS Server:
