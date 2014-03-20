@@ -48,7 +48,7 @@ var sio = null;
 
 // - Redis -> Redis Driver/Adapter
 var redis = require('redis');
-var redispublish = null;
+//var redispublish = null;
 
 // - AMQP -> RabbitMQ Connection Library
 var amqp = require('amqplib');
@@ -99,7 +99,7 @@ function errorHandler(err, req, res, next) {
 // ----------------------------
 // GLOBALS:
 // ----------------------------
-var POSSIBLE_SEED_KEY = [
+var POSSIBLE_LARGE_SEEDS = [
 '=Z<x.hVR87OG&gc,N!WfS7vv#cuanX|eyc{0mz6v]:zQ`>*x?m?-tvv#RAP&:1B)}<Y&rX!zOG3I[b=M:t`EXSP/t>Dv9pS/@;BSnn!4DuE`=]zgl0<l+YY&)%M*|hBWx4WGE6Tknlu5mJv}-H&x>ZRvu_(NmAdk@Ua.w,#e5VVG+lD=KJ+#[&-X&OnC[+aIY:MI|5rw,,;C>.w#/Q)^!c3!Sz1|vqg6v@!o+^vA!,~ux)~1hi-c~.)#OuY_0?4+',
 'Q+{]-H_dgFAl`bhw%f1{yv~IdV1FS*s:e$v:gVE*J]Iv4aXwzf!`pEOm/+*BxZvpjHA7H=_^qg|?v{}XB8*6:d&~B+m7tv}@WV~<59b$q$z|!N&jZbm?LUR@[U6I$+{t7iiT~PvJ=JTC)SgH~CO78)=c$Hqh$f~xneBpv;Uu#zwh6DmI&Fuvl6`0|_9fTRpj=cFGQ;*LS"(|u$%`yb{/TUz<Fi<Y/,(N_|jpf]1Y4r!zI$R+pO#rU*gI-w74sK^3',
 '*Ef;}$Y:p`zinV~4}eA6IVbcWs0DRavU~Hc(ox1ooNMJlxo;hEvN/vVt[q-xQMDS_;[~UrntFZdP72<=UlQvKb.8~F{eo%&z(PGf0KcxZC5B.k}H?]Z8v}7X}IhBi(s)T`6d>7pO(3x/vEK^p&gm,wL-gF9ux?GoqojLiA;{Tlxf-bhMpxar-J>b[G6:~Icbz8Py?a8l;_rZ4TPd<w&0y$~QWt(b"i8[VAixi"s_O-Y>cShb-mE_q1xm|3/2~%?Y'
@@ -124,12 +124,16 @@ var AMQP_PORT = 5671;
 var REDIS_PORT = 6379;
 var REDIS_HOST = '127.0.0.1';
 
-var REDIS_CMD_SUBSCRIPTION = 'redis_cmd_sub';
-var REDIS_MAL_SUBSCRIPTION = 'redis_mal_sub';
 var REDIS_SENT_HEADER = 'sent_meta_';
 var REDIS_SENT_ORDER_KEY = 'cdx_sent_order';
+
 var REDIS_MAL_HEADER = 'mal_meta_';
 var REDIS_MAL_ORDER_KEY = 'cdx_mal_order';
+
+var REDIS_MAL_QUEUE_KEY = 'cdx_mal_submits_queue';
+var REDIS_CMD_QUEUE_KEY = 'cdx_cmd_submits_queue';
+var MAL_LOCK_KEY = 'cdx_mal_lock_key';
+var CMD_LOCK_KEY = 'cdx_cmd_lock_key';
 
 // ----------------------------
 // Commander:
@@ -147,8 +151,6 @@ cdxgc_man_args
 // Redis and AMQP:
 // ----------------------------
 
-var MAL_LOCK_KEY = 'cdx_mal_lock_key';
-var CMD_LOCK_KEY = 'cdx_cmd_lock_key';
 var redisLock = {
 	lockKeyHash: null,
 	intervalCounter: 0,
@@ -165,7 +167,7 @@ var redisLock = {
 		
 		// Build lock string:
 		var currentDate = new Date();
-		var currentDigest = currentDate.toJSON() + POSSIBLE_SEED_KEY[CHOOSEN_SEED];
+		var currentDigest = currentDate.toJSON() + POSSIBLE_LARGE_SEEDS[CHOOSEN_SEED];
 		var shasum = crypto.createHash('sha1');
 		shasum.update(currentDigest, 'utf8');
 		var hashout = shasum.digest('hex');
@@ -216,13 +218,58 @@ var redisLock = {
 		redisclient.eval(evalArgs, function (err, reply) {
 			logger.debug('redisLock :: releaseLock :: Reply: '+reply+' Err: '+err);
 			if (reply == 1){
+				logger.debug('redisLock :: releaseLock :: released!');
 				lockDeferRes.resolve(reply);
 			} else {
+				logger.debug('redisLock :: releaseLock :: failed!');
 				lockDeferRes.reject(err);
 			}
 		});
 		return lockDefer.promise;
 	}
+};
+
+var addTaskToQueue = function (queue,task){
+	// Turn the received object to a string to push into the malicious list:
+	var taskStr = JSON.stringify(task);
+	
+	var curLockKey = null;
+	if(queue === REDIS_MAL_QUEUE_KEY) {
+		curLockKey = MAL_LOCK_KEY;
+	} else if (queue === REDIS_CMD_QUEUE_KEY) {
+		curLockKey = CMD_LOCK_KEY;
+	} else {
+		return false;
+	}
+	
+	// Handle all the command output:
+	var lockProm = redisLock.setLock(curLockKey, 1000);
+	return lockProm.then(function (lockHash) {
+		logger.debug('addTaskToQueue :: lockHash: '+lockHash);
+		var listPushDefer = when.defer();
+		var listPushDeferRes = listPushDefer.resolver;
+		
+		var rpushArgs = [queue, taskStr];
+		redisclient.rpush(rpushArgs, function (err, reply) {
+			if (reply >= 1) {
+				listPushDeferRes.resolve(reply);
+			} else {
+				listPushDeferRes.reject(err);
+			}
+		});
+		
+		return listPushDefer.promise;
+	}).then(function (listLen) {
+		logger.debug('List Length: '+listLen);
+		// Release the lock:
+		return redisLock.releaseLock(curLockKey);
+	}).then(function (lockReleaseSuccess) {
+		if (lockReleaseSuccess === 1){
+			return true;
+		} else {
+			return false;
+		}
+	});
 };
 
 var redisCmdRecieve = function (channel, message) {
@@ -240,16 +287,16 @@ var starter = function() {
 	logger.info('Redis Server: ' + cdxgc_man_args.redis_host);
 	logger.info('Redis Port: ' + cdxgc_man_args.redis_port);
 
-	CHOOSEN_SEED = well.randInt(0, (POSSIBLE_SEED_KEY.length-1));
-	logger.info('Choosen Seed [' + CHOOSEN_SEED + ']: ' + POSSIBLE_SEED_KEY[CHOOSEN_SEED]);
+	CHOOSEN_SEED = well.randInt(0, (POSSIBLE_LARGE_SEEDS.length-1));
+	logger.info('Choosen Seed [' + CHOOSEN_SEED + ']: ' + POSSIBLE_LARGE_SEEDS[CHOOSEN_SEED]);
 
 	// Redis Setup:
 	redisclient = redis.createClient(cdxgc_man_args.redis_port, cdxgc_man_args.redis_host);
-	redispublish = redis.createClient(cdxgc_man_args.redis_port, cdxgc_man_args.redis_host);
-    redispublish.on('connect', function (err) {
+	//redispublish = redis.createClient(cdxgc_man_args.redis_port, cdxgc_man_args.redis_host);
+    redisclient.on('connect', function (err) {
         logger.info('Redis Connected');
     });
-    redispublish.on('error', function (err) {
+    redisclient.on('error', function (err) {
         logger.error('Redis Error :: ' + err);
     });
 
@@ -594,14 +641,32 @@ sio.on('connection',function (socket) {
 		}
 	});
 	socket.on('malInput', function (malInputObj) {
-		logger.debug('malInputObj: '+util.inspect(malInputObj));
-		// Handle all the command output:
-		var lockProm = redisLock.setLock(MAL_LOCK_KEY, 1000);
-		lockProm.then(function (lockHash) {
-			logger.debug('malInput :: lockHash: '+lockHash);
-			redisLock.releaseLock(MAL_LOCK_KEY);
-		});
+		var malInputEmitStr = 'malCmdStatus';
+		logger.info('sio :: malInput :: Adding Mal Command: '+util.inspect(malInputObj));
+		socket.emit(malInputEmitStr, 'Adding Mal Command: '+util.inspect(malInputObj));
+		var addSuccess = addTaskToQueue(REDIS_MAL_QUEUE_KEY, malInputObj);
+		if (addSuccess) {
+			socket.emit(malInputEmitStr, 'Done Adding Mal Command: '+util.inspect(malInputObj));
+			logger.info('sio :: malInput :: Done Adding Mal Command: '+util.inspect(malInputObj));
+		} else {
+			logger.info('sio :: malInput :: Problem Adding Mal Command: '+util.inspect(malInputObj));
+			socket.emit(malInputEmitStr, 'Problem Adding Mal Command: '+util.inspect(malInputObj));
+		}
 	});
+	socket.on('othercmdinput', function (otherCmdInputObj) {
+		var otherCmdInputEmitStr = 'otherCmdStatus';
+		logger.info('sio :: othercmdinput :: Adding Command: '+util.inspect(otherCmdInputObj));
+		socket.emit(otherCmdInputEmitStr, 'Adding Command: '+util.inspect(otherCmdInputObj));
+		var addSuccess = addTaskToQueue(REDIS_CMD_QUEUE_KEY, otherCmdInputObj);
+		if (addSuccess) {
+			socket.emit(otherCmdInputEmitStr, 'Done Adding Command: '+util.inspect(otherCmdInputObj));
+			logger.info('sio :: othercmdinput :: Done Adding Command: '+util.inspect(otherCmdInputObj));
+		} else {
+			logger.info('sio :: othercmdinput :: Problem Adding Command: '+util.inspect(otherCmdInputObj));
+			socket.emit(otherCmdInputEmitStr, 'Problem Adding Command: '+util.inspect(otherCmdInputObj));
+		}
+	});
+	
 });
 // Launch HTTPS Server:
 main_https.listen(app.get('port'), function(){

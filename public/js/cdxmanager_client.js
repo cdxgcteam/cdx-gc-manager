@@ -93,6 +93,12 @@ var start_socket = function () {
 			socket.on('redisCmdStatus',function (data) {
 				updateStatus('redisCmdStatus', data);
 			});
+			socket.on('malCmdStatus',function (data) {
+				updateStatus('malCmdStatus', data);
+			});
+			socket.on('otherCmdStatus',function (data) {
+				updateStatus('otherCmdStatus', data);
+			});
 			socket.on('disconnect', function(){
 				logger('sio :: disconnected');
 			});
@@ -207,9 +213,25 @@ var runner = function () {
 			logger('malInput :: Recieved POC: '+malInputPOC);
 			logger('malInput :: Recieved MinTime: '+malInputMinTime);
 			socket.emit('malInput', {
+				cmd: 'executeURL',
 				url: malInputURL,
 				poc: malInputPOC,
 				minTime: malInputMinTime
+			});
+			evt.preventDefault();
+		});
+		
+		$('#othercmdinput').submit(function (evt) {
+			var cmdChoice = $('#commandChoice').val();
+			var pauseTime = $('#pauseTime').val();
+			var cmdPOC = $('#commandPOC').val();
+			logger('othercmdinput :: Command Choice: '+cmdChoice);
+			logger('othercmdinput :: Pause Time: '+pauseTime);
+			logger('othercmdinput :: Command POC: '+cmdPOC);
+			socket.emit('othercmdinput', {
+				cmd: cmdChoice,
+				pauseTimeMS: pauseTime,
+				poc: cmdPOC
 			});
 			evt.preventDefault();
 		});
