@@ -27,7 +27,8 @@
     "express": "3.x",
     "socket.io": "LearnBoost/socket.io",
     "well-rng": "1.0.x",
-    "moment": "^2.5.1"
+    "moment": "^2.5.1",
+    "keygrip": "^1.0.0"
   },
   "scripts": {
     "start": "node ./cdxgc_manager_server.js"

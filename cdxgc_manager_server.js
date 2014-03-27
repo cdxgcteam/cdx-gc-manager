@@ -104,7 +104,7 @@ var POSSIBLE_LARGE_SEEDS = [
 'Q+{]-H_dgFAl`bhw%f1{yv~IdV1FS*s:e$v:gVE*J]Iv4aXwzf!`pEOm/+*BxZvpjHA7H=_^qg|?v{}XB8*6:d&~B+m7tv}@WV~<59b$q$z|!N&jZbm?LUR@[U6I$+{t7iiT~PvJ=JTC)SgH~CO78)=c$Hqh$f~xneBpv;Uu#zwh6DmI&Fuvl6`0|_9fTRpj=cFGQ;*LS"(|u$%`yb{/TUz<Fi<Y/,(N_|jpf]1Y4r!zI$R+pO#rU*gI-w74sK^3',
 '*Ef;}$Y:p`zinV~4}eA6IVbcWs0DRavU~Hc(ox1ooNMJlxo;hEvN/vVt[q-xQMDS_;[~UrntFZdP72<=UlQvKb.8~F{eo%&z(PGf0KcxZC5B.k}H?]Z8v}7X}IhBi(s)T`6d>7pO(3x/vEK^p&gm,wL-gF9ux?GoqojLiA;{Tlxf-bhMpxar-J>b[G6:~Icbz8Py?a8l;_rZ4TPd<w&0y$~QWt(b"i8[VAixi"s_O-Y>cShb-mE_q1xm|3/2~%?Y'
 ];
-var CHOOSEN_SEED = null;
+var CHOOSEN_SEED = 0;
 var WEB_SERVER_PORT = 3443;
 var BASE_CSV_PATH = './public/csv';
 var BASE_CSV_URL_PATH = '/csv';
@@ -132,8 +132,8 @@ var REDIS_MAL_ORDER_KEY = 'cdx_mal_order';
 
 var REDIS_MAL_QUEUE_KEY = 'cdx_mal_submits_queue';
 var REDIS_CMD_QUEUE_KEY = 'cdx_cmd_submits_queue';
-var MAL_LOCK_KEY = 'cdx_mal_lock_key';
-var CMD_LOCK_KEY = 'cdx_cmd_lock_key';
+var REDIS_MAL_LOCK_KEY = 'cdx_mal_lock_key';
+var REDIS_CMD_LOCK_KEY = 'cdx_cmd_lock_key';
 
 // ----------------------------
 // Commander:
@@ -235,9 +235,9 @@ var addTaskToQueue = function (queue,task){
 	
 	var curLockKey = null;
 	if(queue === REDIS_MAL_QUEUE_KEY) {
-		curLockKey = MAL_LOCK_KEY;
+		curLockKey = REDIS_MAL_LOCK_KEY;
 	} else if (queue === REDIS_CMD_QUEUE_KEY) {
-		curLockKey = CMD_LOCK_KEY;
+		curLockKey = REDIS_CMD_LOCK_KEY;
 	} else {
 		return false;
 	}
@@ -292,15 +292,14 @@ var starter = function() {
 
 	// Redis Setup:
 	redisclient = redis.createClient(cdxgc_man_args.redis_port, cdxgc_man_args.redis_host);
-	//redispublish = redis.createClient(cdxgc_man_args.redis_port, cdxgc_man_args.redis_host);
     redisclient.on('connect', function (err) {
         logger.info('Redis Connected');
+		deferred.resolve(true);
     });
     redisclient.on('error', function (err) {
         logger.error('Redis Error :: ' + err);
     });
 
-	deferred.resolve(true);
 	return deferred.promise;
 };
 
@@ -644,27 +643,33 @@ sio.on('connection',function (socket) {
 		var malInputEmitStr = 'malCmdStatus';
 		logger.info('sio :: malInput :: Adding Mal Command: '+util.inspect(malInputObj));
 		socket.emit(malInputEmitStr, 'Adding Mal Command: '+util.inspect(malInputObj));
-		var addSuccess = addTaskToQueue(REDIS_MAL_QUEUE_KEY, malInputObj);
-		if (addSuccess) {
-			socket.emit(malInputEmitStr, 'Done Adding Mal Command: '+util.inspect(malInputObj));
-			logger.info('sio :: malInput :: Done Adding Mal Command: '+util.inspect(malInputObj));
-		} else {
-			logger.info('sio :: malInput :: Problem Adding Mal Command: '+util.inspect(malInputObj));
-			socket.emit(malInputEmitStr, 'Problem Adding Mal Command: '+util.inspect(malInputObj));
-		}
+		var addTaskPromise = addTaskToQueue(REDIS_MAL_QUEUE_KEY, malInputObj);
+		addTaskPromise.then(function (addSuccess) {
+			// AddSuccess should be a boolean value:
+			if (addSuccess) {
+				socket.emit(malInputEmitStr, 'Done Adding Mal Command: '+util.inspect(malInputObj));
+				logger.info('sio :: malInput :: Done Adding Mal Command: '+util.inspect(malInputObj));
+			} else {
+				logger.info('sio :: malInput :: Problem Adding Mal Command: '+util.inspect(malInputObj));
+				socket.emit(malInputEmitStr, 'Problem Adding Mal Command: '+util.inspect(malInputObj));
+			}
+		});
 	});
 	socket.on('othercmdinput', function (otherCmdInputObj) {
 		var otherCmdInputEmitStr = 'otherCmdStatus';
 		logger.info('sio :: othercmdinput :: Adding Command: '+util.inspect(otherCmdInputObj));
 		socket.emit(otherCmdInputEmitStr, 'Adding Command: '+util.inspect(otherCmdInputObj));
-		var addSuccess = addTaskToQueue(REDIS_CMD_QUEUE_KEY, otherCmdInputObj);
-		if (addSuccess) {
-			socket.emit(otherCmdInputEmitStr, 'Done Adding Command: '+util.inspect(otherCmdInputObj));
-			logger.info('sio :: othercmdinput :: Done Adding Command: '+util.inspect(otherCmdInputObj));
-		} else {
-			logger.info('sio :: othercmdinput :: Problem Adding Command: '+util.inspect(otherCmdInputObj));
-			socket.emit(otherCmdInputEmitStr, 'Problem Adding Command: '+util.inspect(otherCmdInputObj));
-		}
+		var addTaskPromise = addTaskToQueue(REDIS_CMD_QUEUE_KEY, otherCmdInputObj);
+		addTaskPromise.then(function (addSuccess) {
+			// AddSuccess should be a boolean value:
+			if (addSuccess) {
+				socket.emit(otherCmdInputEmitStr, 'Done Adding Command: '+util.inspect(otherCmdInputObj));
+				logger.info('sio :: othercmdinput :: Done Adding Command: '+util.inspect(otherCmdInputObj));
+			} else {
+				logger.info('sio :: othercmdinput :: Problem Adding Command: '+util.inspect(otherCmdInputObj));
+				socket.emit(otherCmdInputEmitStr, 'Problem Adding Command: '+util.inspect(otherCmdInputObj));
+			}
+		});
 	});
 	
 });

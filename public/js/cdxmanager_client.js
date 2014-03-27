@@ -173,9 +173,29 @@ var runner = function () {
 			var currentID = $(this).attr('id');
 			var currentValue = $(this).val();
 			var idHandle = '#'+currentID;
-			currentValue = _.parseInt(currentValue);
-			if(!_.isNaN(currentValue)){
-				$(idHandle + ' ~ span').remove();
+			var parsedCurrentValue = _.parseInt(currentValue);
+			if(!_.isNaN(parsedCurrentValue) && )
+			{
+				$(idHandle+' ~ span').remove();
+				$(this).parent().removeClass('has-error has-feedback');
+				$(this).parent().addClass('has-success has-feedback');
+				$(this).parent().append('<span class="glyphicon glyphicon-ok form-control-feedback"></span>');
+			} else {
+				$(idHandle+' ~ span').remove();
+				$(this).parent().removeClass('has-success has-feedback');
+				$(this).parent().addClass('has-error has-feedback');
+				$(this).parent().append('<span class="glyphicon glyphicon-remove form-control-feedback"></span>');
+			}
+		});
+		
+		// POC Validator:
+		$('#commandPOC, #malInputPOC').change(function (evt) {
+			var currentID = $(this).attr('id');
+			var currentValue = $(this).val();
+			var idHandle = '#'+currentID;
+			var valMatches = currentValue.match(/\w+/i);
+			if(currentValue === valMatches[0]){
+				$(idHandle+' ~ span').remove();
 				$(this).parent().removeClass('has-error has-feedback');
 				$(this).parent().addClass('has-success has-feedback');
 				$(this).parent().append('<span class="glyphicon glyphicon-ok form-control-feedback"></span>');
@@ -206,18 +226,26 @@ var runner = function () {
 		
 		//Malicious Form Submittal:
 		$('#malInput').submit(function (evt) {
-			var malInputURL = $('#malInputURL')[0].value;
-			var malInputPOC = $('#malInputPOC')[0].value;
-			var malInputMinTime = $('#malInputMinTime')[0].value;
-			logger('malInput :: Recieved URL: '+malInputURL);
-			logger('malInput :: Recieved POC: '+malInputPOC);
-			logger('malInput :: Recieved MinTime: '+malInputMinTime);
-			socket.emit('malInput', {
-				cmd: 'executeURL',
-				url: malInputURL,
-				poc: malInputPOC,
-				minTime: malInputMinTime
-			});
+			var malInputURL = $('#malInputURL').val();
+			var malInputPOC = $('#malInputPOC').val();
+			var malInputMinTime = $('#malInputMinTime').val();
+			
+			if ($('#malInputURL').parent().hasClass('has-error') ||
+				$('#malInputPOC').parent().hasClass('has-error') ||
+				$('#malInputMinTime').parent().hasClass('has-error'))
+			{
+				alert('Please correct all the errors before it will submit!');
+			} else {
+				logger('malInput :: Recieved URL: '+malInputURL);
+				logger('malInput :: Recieved POC: '+malInputPOC);
+				logger('malInput :: Recieved MinTime: '+malInputMinTime);
+				socket.emit('malInput', {
+					cmd: 'execute_url',
+					url: malInputURL,
+					poc: malInputPOC,
+					minTime: malInputMinTime
+				});
+			}
 			evt.preventDefault();
 		});
 		
@@ -225,14 +253,20 @@ var runner = function () {
 			var cmdChoice = $('#commandChoice').val();
 			var pauseTime = $('#pauseTime').val();
 			var cmdPOC = $('#commandPOC').val();
-			logger('othercmdinput :: Command Choice: '+cmdChoice);
-			logger('othercmdinput :: Pause Time: '+pauseTime);
-			logger('othercmdinput :: Command POC: '+cmdPOC);
-			socket.emit('othercmdinput', {
-				cmd: cmdChoice,
-				pauseTimeMS: pauseTime,
-				poc: cmdPOC
-			});
+			if ($('#commandPOC').parent().hasClass('has-error') ||
+				$('#pauseTime').parent().hasClass('has-error'))
+			{
+				alert('Please correct all the errors before it will submit!');
+			} else {
+				logger('othercmdinput :: Command Choice: '+cmdChoice);
+				logger('othercmdinput :: Pause Time: '+pauseTime);
+				logger('othercmdinput :: Command POC: '+cmdPOC);
+				socket.emit('othercmdinput', {
+					cmd: cmdChoice,
+					pauseTimeMS: pauseTime,
+					poc: cmdPOC
+				});
+			}
 			evt.preventDefault();
 		});
 	}
