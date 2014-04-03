@@ -126,7 +126,6 @@ var REDIS_HOST = '127.0.0.1';
 
 var REDIS_SENT_HEADER = 'sent_meta_';
 var REDIS_SENT_ORDER_KEY = 'cdx_sent_order';
-
 var REDIS_MAL_HEADER = 'mal_meta_';
 var REDIS_MAL_ORDER_KEY = 'cdx_mal_order';
 
@@ -281,6 +280,7 @@ var starter = function() {
 
 	logger.info('Starting CDX GC Manager');
 
+	logger.info('OS Platform: '+os.platform());
 	logger.info('Web Server Port: ' + cdxgc_man_args.web_port);
 	logger.info('AMQP Server: ' + cdxgc_man_args.amqp_host);
 	logger.info('AMQP Port: ' + cdxgc_man_args.amqp_port);
@@ -505,14 +505,14 @@ sio.on('connection',function (socket) {
 									reject('no data to process');
 								}
 							});
-						}).then(function (data) {
+						}).then(function (data) { // Data Found Path...
 							logger.debug('in when...2:\n'+util.inspect(data));
 							var dataFilter = _.filter(data, function (item) {
 								logger.debug('item: ' + item + ' match: ' + util.inspect(headerRegex.test(item)));
 								return headerRegex.test(item);
 							});
 							return dataFilter;
-						},function (rejectReason) {
+						},function (rejectReason) { // Data NOT Found Path...
 							logger.warn('sio :: redisCmd :: export ('+currentSortKey+') :: reject reason: '+ rejectReason);
 							callback(null);
 							return [];
@@ -615,7 +615,6 @@ sio.on('connection',function (socket) {
 					});
 					return deleteDefer.promise;
 				});
-				//return deleteMap.promise;
 			}).then(function (keysDeleted) {
 				logger.info('sio :: redisCmd :: clearAllKeys - sort :: starting deletion process.');
 				logger.debug('Keys deleted:\n'+util.inspect(keysDeleted));

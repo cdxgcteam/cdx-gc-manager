@@ -28,7 +28,7 @@ logMessage = function(msg) {
 	console.log(" [x] %s:'%s'",
 				msg.fields.routingKey,
 				msg.content.toString());
-	
+	AMQP_CH.ack(msg);
 	AMQP_CH.publish(AMQP_RESULTS_EXCHANGE, AMQP_RESULTS_ROUTING_KEY, new Buffer(message));
 	console.log(" RESULT!! Sent %s:'%s'", message);
 };
@@ -56,7 +56,7 @@ amqp.connect('amqp://localhost').then(function(conn) {
 	    });
 		
 		tasks = tasks.then(function(queue) {
-			return ch.consume(queue, logMessage, {noAck: true});
+			return ch.consume(queue, logMessage, {noAck: false});
 		});
 		return tasks.then(function() {
 			console.log(' AMQP :: Waiting for tasks. To exit press CTRL+C.');

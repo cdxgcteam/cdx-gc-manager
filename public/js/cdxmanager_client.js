@@ -18,22 +18,26 @@ var pushFullTable = function(intable, tabledata) {
 	for(var i=(tabledata.length-1); i >= 0; i--) {
 		addNewRow(
 			intable,
-			tabledata[i].taskid,
-			tabledata[i].url,
-			tabledata[i].poc,
-			tabledata[i].minWorkTime,
-			tabledata[i].workTime,
-			tabledata[i].taskCreateDate,
-			tabledata[i].taskCreateMS,
+			tabledata[i],
+			// .taskid,
+// 			tabledata[i].taskType,
+// 			tabledata[i].url,
+// 			tabledata[i].poc,
+// 			tabledata[i].minWorkTime,
+// 			tabledata[i].workTime,
+// 			tabledata[i].taskCreateDate,
+// 			tabledata[i].taskCreateMS,
 			0
 		);
 	}
 };
 
-var addNewRow = function (tbodyStr, id, url, poc, minTime, workTime, submittedTime, submittedTimeMS, completedCount) {
+//var addNewRow = function (tbodyStr, id, taskType, url, poc, minTime, workTime, submittedTime, submittedTimeMS, completedCount) {
+var addNewRow = function (tbodyStr, inputData, completedCount) {
 	var tempStr = '#' + tbodyStr;
 	var baseTable = $(tempStr);
 	
+	var id = inputData.taskID;
 	var firstRowIDCheck = $(tempStr+' tr:first td:first');
 	if (firstRowIDCheck.length == 1 && firstRowIDCheck[0].textContent === id) {
 		logger('addNewRow :: The recieved row is a repeat of the first one ...');
@@ -45,26 +49,57 @@ var addNewRow = function (tbodyStr, id, url, poc, minTime, workTime, submittedTi
 		// Create a new row:
 		var newRow = baseTable[0].insertRow(0);
 
-		cur_id = newRow.insertCell(0);
+		// Task ID:
+		var cellCounter = 0;
+		cur_id = newRow.insertCell(cellCounter);
 		cur_id.innerText = id;
+		cellCounter++;
 
-		cur_url = newRow.insertCell(1);
-		cur_url.innerHTML = '<a href="'+url+'" data-toggle="tooltip" data-placement="right" title="'+url+'">Link</a>';
+		// Task Type:
+		cur_taskType = newRow.insertCell(cellCounter);
+		cur_taskType.innerText = inputData.taskType;
+		cellCounter++;
+		
+		// CMD:
+		cur_cmd = newRow.insertCell(cellCounter);
+		cur_cmd.innerText = inputData.cmd;
+		cellCounter++;
 
-		cur_poc = newRow.insertCell(2);
-		cur_poc.innerText = poc;
+		// URL:
+		cur_url = newRow.insertCell(cellCounter);
+		var url = inputData.url;
+		var urlMatches = url.match(/htt(p|ps):\/\//i);
+		if(!_.isNull(urlMatches)){
+			cur_url.innerHTML = '<a href="'+url+'" data-toggle="tooltip" data-placement="right" title="'+url+'">Link</a>';
+		} else {
+			cur_url.innerText = 'None';
+		}
+		cellCounter++;
 
-		cur_min = newRow.insertCell(3);
-		cur_min.innerText = minTime + ' ms';
+		// POC:
+		cur_poc = newRow.insertCell(cellCounter);
+		cur_poc.innerText = inputData.poc;
+		cellCounter++;
+		
+		// Minimum Run Time:
+		cur_min = newRow.insertCell(cellCounter);
+		cur_min.innerText = inputData.minWorkTime + ' ms';
+		cellCounter++;
+		
+		// Selected Run Time:
+		cur_time = newRow.insertCell(cellCounter);
+		cur_time.innerText = inputData.workTime + ' ms';
+		cellCounter++;
 
-		cur_time = newRow.insertCell(4);
-		cur_time.innerText = workTime + ' ms';
+		// Submission Time:
+		cur_submit = newRow.insertCell(cellCounter);
+		cur_submit.innerText = inputData.taskCreateDate + '('+ inputData.taskCreateMS +' ms)';
+		cellCounter++;
 
-		cur_submit = newRow.insertCell(5);
-		cur_submit.innerText = submittedTime + '('+ submittedTimeMS +' ms)';
-
-		cur_badge = newRow.insertCell(6);
-		cur_badge.innerHTML = '<span class="badge">' + completedCount + '</span>';	
+		// Completed Items:
+		cur_badge = newRow.insertCell(cellCounter);
+		cur_badge.innerHTML = '<span class="badge">' + completedCount + '</span>';
+		cellCounter++;
 		
 		// Add javascript additions:
 		var turn_on_tooltip = 'tr:contains("'+id+'") a';
@@ -172,16 +207,14 @@ var runner = function () {
 		$('#pauseTime, #malInputMinTime').change(function (evt) {
 			var currentID = $(this).attr('id');
 			var currentValue = $(this).val();
-			var idHandle = '#'+currentID;
-			var parsedCurrentValue = _.parseInt(currentValue);
-			if(!_.isNaN(parsedCurrentValue) && )
-			{
-				$(idHandle+' ~ span').remove();
+			var test = currentValue.match(/\d+$/i);
+			if(!_.isNull(test)) {
+				$('#'+currentID+' ~ span').remove();
 				$(this).parent().removeClass('has-error has-feedback');
 				$(this).parent().addClass('has-success has-feedback');
 				$(this).parent().append('<span class="glyphicon glyphicon-ok form-control-feedback"></span>');
 			} else {
-				$(idHandle+' ~ span').remove();
+				$('#'+currentID+' ~ span').remove();
 				$(this).parent().removeClass('has-success has-feedback');
 				$(this).parent().addClass('has-error has-feedback');
 				$(this).parent().append('<span class="glyphicon glyphicon-remove form-control-feedback"></span>');
@@ -192,15 +225,14 @@ var runner = function () {
 		$('#commandPOC, #malInputPOC').change(function (evt) {
 			var currentID = $(this).attr('id');
 			var currentValue = $(this).val();
-			var idHandle = '#'+currentID;
 			var valMatches = currentValue.match(/\w+/i);
 			if(currentValue === valMatches[0]){
-				$(idHandle+' ~ span').remove();
+				$('#'+currentID+' ~ span').remove();
 				$(this).parent().removeClass('has-error has-feedback');
 				$(this).parent().addClass('has-success has-feedback');
 				$(this).parent().append('<span class="glyphicon glyphicon-ok form-control-feedback"></span>');
 			} else {
-				$(idHandle+' ~ span').remove();
+				$('#'+currentID+' ~ span').remove();
 				$(this).parent().removeClass('has-success has-feedback');
 				$(this).parent().addClass('has-error has-feedback');
 				$(this).parent().append('<span class="glyphicon glyphicon-remove form-control-feedback"></span>');
