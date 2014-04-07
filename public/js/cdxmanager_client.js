@@ -49,6 +49,8 @@ var addNewRow = function (tbodyStr, inputData, completedCount) {
 		// Create a new row:
 		var newRow = baseTable[0].insertRow(0);
 
+		newRow
+
 		// Task ID:
 		var cellCounter = 0;
 		cur_id = newRow.insertCell(cellCounter);
@@ -124,6 +126,13 @@ var start_socket = function () {
 			});
 			socket.on('updateFullMalicious', function(data){
 				pushFullTable('mal_tbody', data);
+			});
+			socket.on('taskUpdate', function(data){
+				logger('sio :: taskUpdate :: '+data);
+				var taskObj = JSON.parse(data);
+				var targetRowObject = 'td:contains("'+taskObj.taskID+'") ~ td > span';
+				var curCount = _.parseInt($(targetRowObject).text());
+				$(targetRowObject).text(curCount++);
 			});
 			socket.on('redisCmdStatus',function (data) {
 				updateStatus('redisCmdStatus', data);

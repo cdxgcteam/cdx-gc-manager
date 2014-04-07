@@ -65,8 +65,8 @@ var winston = require('winston');
 var logger = new (winston.Logger)({
 	exitOnError: false,
 	transports: [
-		new (winston.transports.Console)({level: 'debug', colorize: true, timestamp: true})//,
-		//new (winston.transports.File)({ filename: 'info.log' })
+		new (winston.transports.Console)({level: 'debug', colorize: true, timestamp: true}),
+		new (winston.transports.File)({level: 'debug', colorize: true, timestamp: true, filename: 'info.log' })
 	]//,
 	// exceptionHandlers: [
 	// 	new winston.transports.File({ filename: 'exceptions.log' })
@@ -124,6 +124,7 @@ var AMQP_PORT = 5671;
 var REDIS_PORT = 6379;
 var REDIS_HOST = '127.0.0.1';
 
+var REDIS_RESULT_HEADER = 'result_';
 var REDIS_SENT_HEADER = 'sent_meta_';
 var REDIS_SENT_ORDER_KEY = 'cdx_sent_order';
 var REDIS_MAL_HEADER = 'mal_meta_';
@@ -303,10 +304,52 @@ var starter = function() {
 	return deferred.promise;
 };
 
-var logMessage = function(msg) {
-	logger.info('AMQP :: [x] %s:"%s"',
+// var logMessage = function(msg) {
+// 	//logger.info('AMQP :: msg:\n'+util.inspect(msg));
+// 	logger.info('AMQP :: [x] %s:"%s"',
+// 				msg.fields.routingKey,
+// 				msg.content.toString());
+// };
+
+var resultHandler = function(msg) {
+	logger.info('resultHandler :: AMQP :: [x] %s:"%s"',
 				msg.fields.routingKey,
 				msg.content.toString());
+	
+	var resultObjStr = msg.content.toString();
+	var resultObjs = JSON.parse(msg.content.toString());
+
+	var promise = when.promise(function(resolve, reject, notify) {
+		var testKey = '*'+resultObjs.taskID+'*';
+		redisclient.keys(testKey, function (err, reply) {
+			logger.debug('resultHandler :: found key: '+reply);
+			if (err) {
+				reject(err);
+			} else {
+				resolve(reply);
+			}
+		});
+	}).then(function (foundKey) {
+		var resultKey = REDIS_RESULT_HEADER+foundKey;
+		logger.debug('resultHandler :: result key: '+resultKey);
+		var resultSaveDefer = when.defer();
+		var resultSaveDeferPromise = resultSaveDefer.promise;
+		
+		var hsetInput = [resultKey, resultObjs.executor, resultObjStr];
+		redisclient.hset(hsetInput, function (err, reply) {
+			if (err) {
+				resultSaveDefer.reject(err);
+			} else {
+				logger.info('resultHandler :: result key set reply: '+reply);
+				resultSaveDefer.resolve(reply);
+			}
+		});
+		
+		return resultSaveDeferPromise;
+	}).then(function (replyState) {
+		logger.info('resultHandler :: emitting the result obj to the browser.');
+		sio.sockets.emit('taskUpdate', resultObjStr);
+	});
 };
 
 starter()
@@ -348,7 +391,7 @@ starter()
 
 		    ok = ok.then(function(queue) {
 				logger.info('AMQP :: Consumer configured.');
-				return ch.consume(queue, logMessage, {noAck: true});
+				return ch.consume(queue, resultHandler, {noAck: true});
 		    });
 			
 		    return ok.then(function() {
@@ -375,6 +418,22 @@ app.use(express.logger({stream:winstonStream}));
 app.use(express.json());
 app.use(express.urlencoded());
 app.use(express.methodOverride());
+app.use(express.basicAuth(function (user, pass, callback) {
+	var tempUser = 'cdxman_user_' + user;
+	redisclient.get(tempUser, function (err, reply) {
+		if (err) return callback(err);
+		if(_.isNull(reply)) {
+			var no_reply = 'login error.';
+			return callback(no_reply);
+		}
+		if (reply === pass) {
+			callback(null, user);
+		} else {
+			var bad_pass = 'login error.';
+			return callback(bad_pass);
+		}
+	});
+}));
 app.use(app.router);
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(logErrors);
@@ -577,7 +636,9 @@ sio.on('connection',function (socket) {
 			});
 		} else if(curCmd === 'clearAllKeys'){
 			logger.info('sio :: Clear All Keys');
-			var deletedKeysDefer = when.map([REDIS_SENT_HEADER, REDIS_MAL_HEADER],
+			var headers = [REDIS_SENT_HEADER, REDIS_MAL_HEADER, REDIS_RESULT_HEADER+REDIS_SENT_HEADER, REDIS_RESULT_HEADER+REDIS_MAL_HEADER]
+			logger.debug('sio :: Clear All Keys :: headers: '+util.inspect(headers));
+			var deletedKeysDefer = when.map(headers,
 			function (redisKeyHeader) {
 				var dataKeyDefer = when.defer();
 				var dataKeyDeferRes = dataKeyDefer.resolver;
