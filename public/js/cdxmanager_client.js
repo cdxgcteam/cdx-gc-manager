@@ -27,7 +27,7 @@ var pushFullTable = function(intable, tabledata) {
 // 			tabledata[i].workTime,
 // 			tabledata[i].taskCreateDate,
 // 			tabledata[i].taskCreateMS,
-			0
+			tabledata[i].completedCount
 		);
 	}
 };
@@ -39,7 +39,8 @@ var addNewRow = function (tbodyStr, inputData, completedCount) {
 	
 	var id = inputData.taskID;
 	var firstRowIDCheck = $(tempStr+' tr:first td:first');
-	if (firstRowIDCheck.length == 1 && firstRowIDCheck[0].textContent === id) {
+	//firstRowIDCheck.length == 1 && 
+	if ($(tempStr+' tr:first td:first').text() === id) {
 		logger('addNewRow :: The recieved row is a repeat of the first one ...');
 		return 0;
 	}
@@ -49,57 +50,55 @@ var addNewRow = function (tbodyStr, inputData, completedCount) {
 		// Create a new row:
 		var newRow = baseTable[0].insertRow(0);
 
-		newRow
-
 		// Task ID:
 		var cellCounter = 0;
-		cur_id = newRow.insertCell(cellCounter);
-		cur_id.innerText = id;
+		var cur_id = newRow.insertCell(cellCounter);
+		cur_id.innerHTML = id;
 		cellCounter++;
 
 		// Task Type:
-		cur_taskType = newRow.insertCell(cellCounter);
-		cur_taskType.innerText = inputData.taskType;
+		var cur_taskType = newRow.insertCell(cellCounter);
+		cur_taskType.innerHTML = inputData.taskType;
 		cellCounter++;
 		
 		// CMD:
-		cur_cmd = newRow.insertCell(cellCounter);
-		cur_cmd.innerText = inputData.cmd;
+		var cur_cmd = newRow.insertCell(cellCounter);
+		cur_cmd.innerHTML = inputData.cmd;
 		cellCounter++;
 
 		// URL:
-		cur_url = newRow.insertCell(cellCounter);
+		var cur_url = newRow.insertCell(cellCounter);
 		var url = inputData.url;
 		var urlMatches = url.match(/htt(p|ps):\/\//i);
 		if(!_.isNull(urlMatches)){
 			cur_url.innerHTML = '<a href="'+url+'" data-toggle="tooltip" data-placement="right" title="'+url+'">Link</a>';
 		} else {
-			cur_url.innerText = 'None';
+			cur_url.innerHTML = 'None';
 		}
 		cellCounter++;
 
 		// POC:
-		cur_poc = newRow.insertCell(cellCounter);
-		cur_poc.innerText = inputData.poc;
+		var cur_poc = newRow.insertCell(cellCounter);
+		cur_poc.innerHTML = inputData.poc;
 		cellCounter++;
 		
 		// Minimum Run Time:
-		cur_min = newRow.insertCell(cellCounter);
-		cur_min.innerText = inputData.minWorkTime + ' ms';
+		var cur_min = newRow.insertCell(cellCounter);
+		cur_min.innerHTML = inputData.minWorkTime + ' ms';
 		cellCounter++;
 		
 		// Selected Run Time:
-		cur_time = newRow.insertCell(cellCounter);
-		cur_time.innerText = inputData.workTime + ' ms';
+		var cur_time = newRow.insertCell(cellCounter);
+		cur_time.innerHTML = inputData.workTime + ' ms';
 		cellCounter++;
 
 		// Submission Time:
-		cur_submit = newRow.insertCell(cellCounter);
-		cur_submit.innerText = inputData.taskCreateDate + '('+ inputData.taskCreateMS +' ms)';
+		var cur_submit = newRow.insertCell(cellCounter);
+		cur_submit.innerHTML = inputData.taskCreateDate + '('+ inputData.taskCreateMS +' ms)';
 		cellCounter++;
 
 		// Completed Items:
-		cur_badge = newRow.insertCell(cellCounter);
+		var cur_badge = newRow.insertCell(cellCounter);
 		cur_badge.innerHTML = '<span class="badge">' + completedCount + '</span>';
 		cellCounter++;
 		
@@ -131,8 +130,10 @@ var start_socket = function () {
 				logger('sio :: taskUpdate :: '+data);
 				var taskObj = JSON.parse(data);
 				var targetRowObject = 'td:contains("'+taskObj.taskID+'") ~ td > span';
+				logger('sio :: taskUpdate :: targetRowObject: '+targetRowObject);
 				var curCount = _.parseInt($(targetRowObject).text());
-				$(targetRowObject).text(curCount++);
+				curCount += 1;
+				$(targetRowObject).text(curCount);
 			});
 			socket.on('redisCmdStatus',function (data) {
 				updateStatus('redisCmdStatus', data);
@@ -174,10 +175,10 @@ var runner = function () {
 		
 		setInterval(function () {
 			logger('sio :: starting to update table...');
-			var lastTimeObj = $('#tasks_tbody tr:first td:contains("ms)")');
+			var lastTimeObj = $('#tasks_tbody tr:first td:contains("ms)")').text();
 			if (lastTimeObj.length == 1) {
 				logger('sio :: first time obj found...');
-				var lastTimeMS = lastTimeObj[0].textContent.match(/\((\d+)\s+ms\)/)[1];
+				var lastTimeMS = lastTimeObj.match(/\((\d+)\s+ms\)/)[1];
 				logger('sio :: requesting updates...');
 				socket.emit('updateFullTable', {
 					'tabletype': table_type,
@@ -185,13 +186,14 @@ var runner = function () {
 					'lasttimems': lastTimeMS
 				});
 			}
-		},5000);
+		},10000);
 	}
 
 	// For the admin page:
 	if (document.location.pathname === '/admin'){
 		var redisCmds = ['exportAllKeys',
 						'exportMalKeys',
+						'clearClientList',
 						'clearSentOrder',
 						'clearMalOrder',
 						'clearAllKeys'];
