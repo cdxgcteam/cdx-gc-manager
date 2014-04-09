@@ -176,7 +176,7 @@ var runner = function () {
 		setInterval(function () {
 			logger('sio :: starting to update table...');
 			var lastTimeObj = $('#tasks_tbody tr:first td:contains("ms)")').text();
-			if (lastTimeObj.length == 1) {
+			if (_.isString(lastTimeObj)) {
 				logger('sio :: first time obj found...');
 				var lastTimeMS = lastTimeObj.match(/\((\d+)\s+ms\)/)[1];
 				logger('sio :: requesting updates...');

@@ -285,8 +285,8 @@ var addTaskToQueue = function (queue,task){
 
 var addClientToHashTable = function (host) {
 	var tempLockHash = null;
-	var lockHashTable = redisLock.setLock(REDIS_IDENT_LOCK_KEY, 1000);
-	return lockHashTable.then(function (lockHash) {
+	// var lockHashTable = redisLock.setLock(REDIS_IDENT_LOCK_KEY, 1000);
+// 	return lockHashTable.then(function (lockHash) {
 		tempLockHash = lockHash;
 		logger.debug('addClientToHashTable :: lockHash: '+lockHash);
 		var hashClientDefer = when.defer();
@@ -303,11 +303,11 @@ var addClientToHashTable = function (host) {
 		});
 		
 		return hashClientDefer.promise;
-	}).then(function (result) {
-		logger.debug('addClientToHashTable :: Host Add Result: '+result);
-		// Release the lock:
-		return redisLock.releaseLock(REDIS_IDENT_LOCK_KEY, tempLockHash);
-	});
+	// }).then(function (result) {
+	// 	logger.debug('addClientToHashTable :: Host Add Result: '+result);
+	// 	// Release the lock:
+	// 	return redisLock.releaseLock(REDIS_IDENT_LOCK_KEY, tempLockHash);
+	// });
 };
  
 // var redisCmdRecieve = function (channel, message) {
@@ -358,7 +358,7 @@ var resultHandler = function(msg) {
 	var resultObjs = JSON.parse(msg.content.toString());
 
 	var promise = when.promise(function(resolve, reject, notify) {
-		var testKey = '*'+resultObjs.taskID+'*';
+		var testKey = '*'+resultObjs.taskID;
 		redisclient.keys(testKey, function (err, reply) {
 			logger.debug('resultHandler :: found key: '+reply);
 			if (err) {
@@ -368,7 +368,20 @@ var resultHandler = function(msg) {
 			}
 		});
 	}).then(function (foundKey) {
-		var resultKey = REDIS_RESULT_HEADER+foundKey;
+		var primaryKey = null;
+		if (_.isArray(foundKey)) {
+			logger.debug('resultHandler :: AMQP :: foundKey:'+util.inspect(foundKey));
+			primaryKey = _.find(foundKey,function (item) {
+				logger.debug('resultHandler :: AMQP :: foundKey item:'+util.inspect(item));
+				if (item.match(/^(sent|mal)_meta_/i)) {
+					return item;
+				}
+			});
+		} else {
+			primaryKey = foundKey;
+		}
+		logger.debug('resultHandler :: AMQP :: primaryKey item:'+util.inspect(primaryKey));
+		var resultKey = REDIS_RESULT_HEADER+primaryKey;
 		logger.debug('resultHandler :: result key: '+resultKey);
 		var resultSaveDefer = when.defer();
 		var resultSaveDeferPromise = resultSaveDefer.promise;
